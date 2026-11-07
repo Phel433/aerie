@@ -204,10 +204,8 @@ const UI = {
   /* ---------- live ---------- */
   render_live() {
     const c = Net.lobbyCounts();
-    $('live-pill').innerHTML = Net.hasRoom ? '<i class="dot"></i>' + c.total + ' here now' : '<i class="dot off"></i>Live unavailable';
-    $('live-note').innerHTML = Net.hasRoom
-      ? '<b>Everyone who opens this page shows up here.</b> <span class="muted">In Open Sky you see other gliders and their trails live. In a race room, the pilot who has been waiting longest starts the countdown for everyone in the lobby.</span>'
-      : '<b>Live play is not connected in this view.</b> <span class="muted">It works when the page is opened on claude.ai by signed-in viewers. You can still open a world on your own.</span>';
+    $('live-pill').innerHTML = Net.hasRoom ? '<i class="dot"></i>' + c.total + ' online' : '<i class="dot off"></i>Offline';
+    $('live-note').hidden = true;
     const sw = $('sky-worlds'); sw.innerHTML = '';
     const peers = this.lobbyBy();
     for (const w of WORLDS) {

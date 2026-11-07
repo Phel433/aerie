@@ -1,6 +1,54 @@
 'use strict';
 /* Flung8 — online: shared leaderboard + ghosts (db), live pilots and races (room). Everything degrades to solo. */
 
+// The deployed live server for when the game runs outside claude.ai, e.g. 'wss://flung8.onrender.com'. Empty = solo there.
+const LIVE_SERVER = '';
+
+/* A room API over our WebSocket server, shaped like claude.ai's room capability so Net uses both the same way. */
+function connectLive(url) {
+  return new Promise(resolve => {
+    let ws;
+    try { ws = new WebSocket(url); } catch (e) { resolve(null); return; }
+    let uid = Store.get('uid', '');
+    if (!uid) { uid = 'u' + Math.random().toString(36).slice(2, 12); Store.set('uid', uid); }
+    const rooms = new Map(); // name -> { snapshot, listeners, errs, api }
+    let myId = null, done = false;
+    const finish = v => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
+    const timer = setTimeout(() => { finish(null); try { ws.close(); } catch (e) { /* ignore */ } }, 6000);
+    const send = m => { if (ws.readyState === 1) ws.send(JSON.stringify(m)); };
+    function makeRoom(name) {
+      const h = { snapshot: Object.freeze([]), listeners: [], errs: [] };
+      h.api = {
+        name,
+        presence: async patch => send({ t: 'presence', room: name, p: patch }),
+        onPeers: (fn, onErr) => { h.listeners.push(fn); if (onErr) h.errs.push(onErr); setTimeout(() => fn({ peers: h.snapshot }), 0); return () => {}; },
+        peers: () => h.snapshot,
+        leave: async () => { rooms.delete(name); send({ t: 'leave', room: name }); }
+      };
+      rooms.set(name, h);
+      send({ t: 'join', room: name });
+      return h.api;
+    }
+    ws.onopen = () => send({ t: 'hello', uid });
+    ws.onmessage = e => {
+      let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+      if (m.t === 'welcome') {
+        myId = m.id;
+        const lobby = makeRoom('lobby');
+        lobby.join = async n => (rooms.get(n) || {}).api || makeRoom(n);
+        finish({ lobby, uid });
+      } else if (m.t === 'peers' && Array.isArray(m.peers)) {
+        const h = rooms.get(m.room);
+        if (!h) return;
+        h.snapshot = Object.freeze(m.peers.map(p => ({ peer: p.id, by: p.by, isMe: p.by === uid, sameTab: p.id === myId, kind: 'viewer', guest: false, presence: p.presence || {}, updatedAt: p.at })));
+        h.listeners.forEach(f => f({ peers: h.snapshot }));
+      }
+    };
+    // shortcut: no auto-reconnect; a dropped connection falls back to solo until the page reloads
+    ws.onclose = ws.onerror = () => { finish(null); for (const h of rooms.values()) h.errs.forEach(f => f()); rooms.clear(); };
+  });
+}
+
 const Net = (() => {
   let db = null, room = null, user = null, uid = null;
   let canPost = null;              // null = unknown, false = refused once
@@ -15,7 +63,7 @@ const Net = (() => {
   const emit = () => listeners.forEach(f => { try { f(); } catch (e) { console.error(e); } });
 
   async function init() {
-    if (!window.claude || !window.claude.use) { status = 'solo'; emit(); return; }
+    if (!window.claude || !window.claude.use) { await initLiveServer(); emit(); return; }
     try {
       const [d, r, u] = await Promise.all([claude.use('db'), claude.use('room'), claude.use('user')]);
       db = d; room = r; user = u;
@@ -29,6 +77,18 @@ const Net = (() => {
       if (user && db) { try { const c = await user.can('data.write'); if (c === false) canPost = false; } catch (e) { /* ignore */ } }
     } catch (e) { status = 'solo'; }
     emit();
+  }
+
+  /* Outside claude.ai: live rooms come from our own server (server/server.js) over a WebSocket. */
+  async function initLiveServer() {
+    const local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    const url = new URLSearchParams(location.search).get('server') || LIVE_SERVER || (local ? 'ws://localhost:8787' : '');
+    const live = url ? await connectLive(url) : null;
+    if (!live) { status = 'solo'; return; }
+    room = live.lobby; uid = live.uid;
+    room.onPeers(ch => { lobbyPeers = ch.peers; emit(); }, () => { room = null; sky = race = null; lobbyPeers = []; remote.clear(); status = 'solo'; emit(); });
+    setLobbyPresence();
+    status = 'online';
   }
 
   function subscribeBoard() {
