@@ -10,7 +10,7 @@ web
 Anyone online who opens the shared link: strangers who play once and pilots who come back to beat times. They play on phones (touch) and laptops (keyboard, mouse, gamepad) about equally, in short sessions.
 
 ## Product Purpose
-Aerie is an arcade 3D gliding game in the browser. You fly an engineless glider through ring courses, trade height for speed, ride thermals, and chase medals, ghosts and shared leaderboard times. Success is a first flight that feels good within seconds and a reason to fly one more run.
+Flung8 (formerly Aerie) is an arcade 3D gliding game in the browser. You fly an engineless glider through ring courses, trade height for speed, ride thermals, and chase medals, ghosts and shared leaderboard times. Success is a first flight that feels good within seconds and a reason to fly one more run.
 
 ## Positioning
 No engine: speed comes only from diving, thermals and lift rings, so every run is an energy puzzle. Seven procedural worlds, seeded courses with par times from a simulated pilot, ghost replays, and live shared skies with other pilots on the same link.
@@ -25,7 +25,7 @@ Runs as a claude.ai artifact (private until the owner shares it). One HTML page 
 - Progression: XP levels, 5 frames, 24 paints, 12 trails, 42 achievements, daily challenges.
 
 ## Brand Commitments
-- Name: Aerie.
+- Name: Flung8 (renamed from Aerie on 2026-11-07; internal save keys keep the "aerie:" prefix so old saves still load).
 - Low-poly, flat-shaded 3D geometry stays. Colour, light, fog, UI and type may change.
 
 ## Evidence on Hand

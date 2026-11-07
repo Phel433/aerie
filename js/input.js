@@ -1,5 +1,5 @@
 'use strict';
-/* Aerie — keyboard, mouse, touch stick and gamepad merged into one control state. */
+/* Flung8 — keyboard, mouse, touch stick and gamepad merged into one control state. */
 
 const Input = (() => {
   const keys = new Set(), pressed = new Set();

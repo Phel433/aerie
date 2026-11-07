@@ -1,5 +1,5 @@
 'use strict';
-/* Aerie — boot, renderer, main loop. */
+/* Flung8 — boot, renderer, main loop. */
 
 function pauseGame() {
   if (G.state !== 'play') return;

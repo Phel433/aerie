@@ -1,5 +1,5 @@
 'use strict';
-/* Aerie — glider meshes, flight model and wingtip trails. */
+/* Flung8 — glider meshes, flight model and wingtip trails. */
 
 const FRAME_SHAPES = {
   falcon: { S: 5.0, z0: -3.0, zt: 1.1, z1: 1.3, ztt: 1.7, dih: 0.1, curve: 1, fin: 1.1 },

@@ -1,5 +1,5 @@
 'use strict';
-/* Aerie — world building: terrain, water, sky, clouds, props, colliders, thermals, shards. */
+/* Flung8 — world building: terrain, water, sky, clouds, props, colliders, thermals, shards. */
 
 const WORLD_SIZE = 3200;
 const WORLD_HALF = WORLD_SIZE / 2;

@@ -1,5 +1,5 @@
 'use strict';
-/* Aerie — content tables: worlds, courses, gliders, paints, trails, rewards, achievements, challenges. */
+/* Flung8 — content tables: worlds, courses, gliders, paints, trails, rewards, achievements, challenges. */
 
 const WORLDS = [
   {
@@ -137,7 +137,7 @@ const PAINTS = [
   { id: 'obsidian', name: 'Obsidian', a: '#0f0f14', b: '#ff4a2a', pat: 'tips', unlock: { level: 25 } },
   { id: 'prism', name: 'Prism', a: '#ff4ad8', b: '#4adfff', pat: 'split', unlock: { level: 30 } },
   { id: 'daily', name: 'Daybreak', a: '#ffb36b', b: '#3b3f8f', pat: 'chevron', unlock: { ach: 'daily3' } },
-  { id: 'legend', name: 'Aerie Legend', a: '#fff2c8', b: '#c8902a', pat: 'split', unlock: { level: 40 } }
+  { id: 'legend', name: 'Flung8 Legend', a: '#fff2c8', b: '#c8902a', pat: 'split', unlock: { level: 40 } }
 ];
 const PAINT_BY_ID = Object.fromEntries(PAINTS.map(p => [p.id, p]));
 
@@ -185,7 +185,7 @@ const ACHIEVEMENTS = [
   { id: 'plat1', name: 'Above the Clouds', desc: 'Earn a platinum medal.' },
   { id: 'gold7', name: 'Seven Skies', desc: 'Earn gold on seven courses.' },
   { id: 'allgold', name: 'Sky Marshal', desc: 'Earn gold on every course.' },
-  { id: 'allplat', name: 'Aerie Ascendant', desc: 'Earn platinum on every course.' },
+  { id: 'allplat', name: 'Flung8 Ascendant', desc: 'Earn platinum on every course.' },
   { id: 'roll', name: 'Corkscrew', desc: 'Do a barrel roll.' },
   { id: 'roll3', name: 'Tornado', desc: 'Land a triple roll.' },
   { id: 'loop', name: 'Loop the Loop', desc: 'Fly a full loop.' },
@@ -217,7 +217,7 @@ const ACHIEVEMENTS = [
   { id: 'night', name: 'Night Owl', desc: 'Finish a course in Aurora Fjord.' },
   { id: 'level10', name: 'Fledgling', desc: 'Reach pilot level 10.' },
   { id: 'level25', name: 'Wingmaster', desc: 'Reach pilot level 25.' },
-  { id: 'level40', name: 'Legend of the Aerie', desc: 'Reach pilot level 40.' },
+  { id: 'level40', name: 'Legend of Flung8', desc: 'Reach pilot level 40.' },
   { id: 'photo', name: 'Postcard', desc: 'Open photo mode.' },
   { id: 'stall', name: 'Steady Hands', desc: 'Recover from a stall.' },
   { id: 'challenges', name: 'Busy Bird', desc: 'Complete 10 daily challenges.' }

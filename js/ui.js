@@ -1,5 +1,5 @@
 'use strict';
-/* Aerie — menus, HUD, results and overlays. */
+/* Flung8 — menus, HUD, results and overlays. */
 
 const $ = id => document.getElementById(id);
 const UI = {

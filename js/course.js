@@ -1,5 +1,5 @@
 'use strict';
-/* Aerie — ring courses: generation, meshes, pass detection, autopilot, par times. */
+/* Flung8 — ring courses: generation, meshes, pass detection, autopilot, par times. */
 
 const RING_COLORS = { normal: null, lift: '#5ae6ff', boost: '#ff8a3a', finish: '#ffffff', gold: '#ffd84a', start: null };
 

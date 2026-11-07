@@ -1,5 +1,5 @@
 'use strict';
-/* Aerie — shared helpers: math, seeded random, noise, storage, global state. */
+/* Flung8 — shared helpers: math, seeded random, noise, storage, global state. */
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);

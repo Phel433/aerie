@@ -1,5 +1,5 @@
 'use strict';
-/* Aerie — save data, settings, XP and levels, unlocks, achievements, daily challenges. */
+/* Flung8 — save data, settings, XP and levels, unlocks, achievements, daily challenges. */
 
 const DEFAULT_SETTINGS = { master: 0.8, music: 0.5, sfx: 0.8, pitch: 'plane', steer: 'bank', assist: true, mouse: false, fov: 72, quality: 'med', units: 'kmh', others: true, shake: true, trails: true };
 

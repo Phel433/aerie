@@ -1,5 +1,5 @@
 'use strict';
-/* Aerie — online: shared leaderboard + ghosts (db), live pilots and races (room). Everything degrades to solo. */
+/* Flung8 — online: shared leaderboard + ghosts (db), live pilots and races (room). Everything degrades to solo. */
 
 const Net = (() => {
   let db = null, room = null, user = null, uid = null;

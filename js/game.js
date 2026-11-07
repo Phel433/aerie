@@ -1,5 +1,5 @@
 'use strict';
-/* Aerie — runs: modes, rings, tricks, scoring, crashes, ghosts, races, camera, effects and HUD. */
+/* Flung8 — runs: modes, rings, tricks, scoring, crashes, ghosts, races, camera, effects and HUD. */
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _m4 = new THREE.Matrix4();
 const WORLD_UP = new THREE.Vector3(0, 1, 0);

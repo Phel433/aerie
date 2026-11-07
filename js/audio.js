@@ -1,5 +1,5 @@
 'use strict';
-/* Aerie — synthesized sound: wind, chimes, effects and a generative ambient score. */
+/* Flung8 — synthesized sound: wind, chimes, effects and a generative ambient score. */
 
 const Sfx = (() => {
   let ctx = null, master, musicBus, sfxBus, windGain, windFilter, sprayGain, verb, verbSend;
