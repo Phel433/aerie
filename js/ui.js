@@ -191,7 +191,7 @@ const UI = {
     $('loading').hidden = false; $('loading-text').textContent = 'Getting airborne…';
     setTimeout(async () => {
       try {
-        if (opts.mode === 'sky') { await Net.joinSky(opts.worldId); }
+        if (opts.mode === 'sky') { await Net.joinSky(opts.worldId, opts.server); }
         else if (opts.mode === 'race') { await Net.joinRace(opts.courseId); }
         else await Net.leaveAll();
         this.showOnly('none');
@@ -218,6 +218,14 @@ const UI = {
       b.onclick = () => { Sfx.click(); this.launch({ mode: 'sky', worldId: w.id }); };
       sw.appendChild(b);
     }
+    // server list: every running Open Sky server, with a Join button until it is full
+    const rows = [];
+    for (const w of WORLDS) for (const s of Net.skyServers(w.id)) rows.push({ w, s });
+    $('sky-servers').innerHTML = rows.length
+      ? '<table><tr><th>World</th><th>Server</th><th>Pilots</th><th></th></tr>' + rows.map(({ w, s }) =>
+        '<tr><td>' + escapeHtml(w.name) + '</td><td>' + s.n + '</td><td class="num">' + s.count + ' / ' + Net.SKY_CAP + '</td><td style="text-align:right"><button class="btn small sky" data-w="' + w.id + '" data-n="' + s.n + '"' + (s.full || !worldUnlocked(w) ? ' disabled' : '') + '>' + (s.full ? 'Full' : 'Join') + '</button></td></tr>').join('') + '</table>'
+      : '<span class="muted">No servers running. Pick a world above to start one.</span>';
+    $('sky-servers').querySelectorAll('button[data-w]').forEach(b => (b.onclick = () => { Sfx.click(); this.launch({ mode: 'sky', worldId: b.dataset.w, server: +b.dataset.n }); }));
     const rr = $('race-rooms'); rr.innerHTML = '';
     const list = COURSES.slice().sort((a, b) => (peers.race[b.id] || 0) - (peers.race[a.id] || 0));
     for (const cdef of list) {
@@ -581,7 +589,7 @@ const UI = {
     // pilots in Open Sky
     if (run.mode === 'sky') {
       const names = [...Net.remote.values()].map(r => r.cs);
-      set('h-pilots', Net.inSky ? (names.length ? names.length + ' flying with you: ' + names.slice(0, 5).join(', ') + (names.length > 5 ? '…' : '') : 'Nobody else here yet') : 'Live not connected · flying solo');
+      set('h-pilots', Net.inSky ? 'Server ' + Net.skyServer + ' · ' + (names.length ? names.length + ' flying with you: ' + names.slice(0, 5).join(', ') + (names.length > 5 ? '…' : '') : 'Nobody else here yet') : 'Live not connected · flying solo');
     }
     if (run.mode === 'race' && run.phase !== 'lobby') this.raceStandings(null, run);
     // warnings

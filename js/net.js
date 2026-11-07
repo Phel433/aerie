@@ -108,9 +108,26 @@ const Net = (() => {
   /* ---------- presence ---------- */
   function setLobbyPresence(extra) {
     if (!room) return;
-    const p = Object.assign({ cs: me().cs, w: G.worldId || '', m: G.run ? G.run.mode : 'menu', rc: G.run && G.run.cdef ? G.run.cdef.id : '' }, extra || {});
+    const p = Object.assign({ cs: me().cs, w: G.worldId || '', m: G.run ? G.run.mode : 'menu', rc: G.run && G.run.cdef ? G.run.cdef.id : '', sv: sky ? skyServer : 0 }, extra || {});
     room.presence(p).catch(() => {});
   }
+  /* Open Sky servers: each world has numbered rooms of up to SKY_CAP pilots, counted from lobby presence. */
+  const SKY_CAP = 8;
+  let skyServer = 0;
+  function skyServers(worldId) {
+    const counts = {};
+    for (const p of lobbyPeers) {
+      const pr = p.presence || {};
+      if (p.kind === 'viewer' && pr.m === 'sky' && pr.w === worldId) { const n = pr.sv | 0 || 1; counts[n] = (counts[n] || 0) + 1; }
+    }
+    return Object.keys(counts).map(Number).sort((a, b) => a - b).map(n => ({ n, count: counts[n], full: counts[n] >= SKY_CAP }));
+  }
+  function pickServer(worldId) {
+    const list = skyServers(worldId);
+    for (let n = 1; ; n++) { const s = list.find(x => x.n === n); if (!s || !s.full) return n; }
+  }
+  // server 1 keeps the old room name so pilots on older versions still meet
+  const skyRoomName = (worldId, n) => 'sky-' + worldId + (n > 1 ? '-' + n : '');
   function lobbyCounts() {
     const counts = { total: 0, worlds: {} };
     for (const p of lobbyPeers) {
@@ -123,11 +140,12 @@ const Net = (() => {
   }
 
   /* Open Sky: a named room per world; everyone streams their glider via presence. */
-  async function joinSky(worldId) {
+  async function joinSky(worldId, server) {
     await leaveAll();
     if (!room) return false;
     try {
-      sky = await room.join('sky-' + worldId);
+      skyServer = server || pickServer(worldId);
+      sky = await room.join(skyRoomName(worldId, skyServer));
       sky.onPeers(ch => { syncRemote(ch.peers); emit(); }, () => { sky = null; emit(); });
       return true;
     } catch (e) { sky = null; return false; }
@@ -197,6 +215,7 @@ const Net = (() => {
     init, rankings, attackRankings, postTime, postAttack, postProfile, fetchGhost,
     setLobbyPresence, lobbyCounts, joinSky, joinRace, leaveAll, streamPilot, setRacePresence, racePeers, myPeer,
     remote, goneQueue, lobbyPeers: () => lobbyPeers, on: f => { listeners.add(f); return () => listeners.delete(f); },
+    skyServers, SKY_CAP, get skyServer() { return sky ? skyServer : 0; },
     get status() { return status; }, get uid() { return uid; }, get hasDb() { return !!db; }, get hasRoom() { return !!room; },
     get canPost() { return canPost; }, get inSky() { return !!sky; }, get inRace() { return !!race; }, get boardSize() { return board.size; }
   };
