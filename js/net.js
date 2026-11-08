@@ -2,7 +2,7 @@
 /* Flung8 — online: shared leaderboard + ghosts (db), live pilots and races (room). Everything degrades to solo. */
 
 // The deployed live server for when the game runs outside claude.ai, e.g. 'wss://flung8.onrender.com'. Empty = solo there.
-const LIVE_SERVER = '';
+const LIVE_SERVER = 'wss://flung8.onrender.com';
 
 /* A room API over our WebSocket server, shaped like claude.ai's room capability so Net uses both the same way. */
 function connectLive(url) {
@@ -14,7 +14,8 @@ function connectLive(url) {
     const rooms = new Map(); // name -> { snapshot, listeners, errs, api }
     let myId = null, done = false;
     const finish = v => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
-    const timer = setTimeout(() => { finish(null); try { ws.close(); } catch (e) { /* ignore */ } }, 6000);
+    // 60 s covers a free Render server waking from sleep; the game stays playable solo meanwhile
+    const timer = setTimeout(() => { finish(null); try { ws.close(); } catch (e) { /* ignore */ } }, 60000);
     const send = m => { if (ws.readyState === 1) ws.send(JSON.stringify(m)); };
     function makeRoom(name) {
       const h = { snapshot: Object.freeze([]), listeners: [], errs: [] };
