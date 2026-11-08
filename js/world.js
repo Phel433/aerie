@@ -304,6 +304,10 @@ function buildClouds(W, def, rnd, quality) {
   const geo = new THREE.IcosahedronGeometry(1, 1);
   const col = def.night ? '#3a4a66' : def.kind === 'storm' ? '#6a7484' : '#ffffff';
   const mat = new THREE.MeshStandardMaterial({ color: col, flatShading: true, roughness: 1, emissive: new THREE.Color(def.night ? '#0a1424' : def.sky.mid), emissiveIntensity: def.night ? 0.6 : 0.28 });
+  // clouds dissolve near the camera (screen-door fade, no transparency sorting), so flying through one never blanks the screen
+  mat.onBeforeCompile = sh => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <fog_fragment>', '#include <fog_fragment>\n float cFade = smoothstep(15.0, 60.0, length(vViewPosition));\n if (cFade < 1.0 && cFade < fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))))) discard;');
+  };
   const mesh = new THREE.InstancedMesh(geo, mat, puffs.length);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   puffs.forEach((pf, i) => {
