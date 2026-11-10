@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Play Flung8 – Glider Controls, Maps and Tips</title>
+<meta name="description" content="How to play Flung8, the free 3D glider game: keyboard, touch and gamepad controls, how gliding works, the 7 worlds and 14 courses, and tips for faster times.">
+<link rel="canonical" href="https://phel433.github.io/flung8/how-to-play.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Flung8">
+<meta property="og:title" content="How to Play Flung8">
+<meta property="og:description" content="Controls, maps and tips for the free 3D glider game.">
+<meta property="og:url" content="https://phel433.github.io/flung8/how-to-play.html">
+<meta property="og:image" content="https://phel433.github.io/flung8/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%230d1328%27/%3E%3Cpath d=%27M32 14 L56 44 L32 37 L8 44 Z%27 fill=%27%23ff9d5c%27/%3E%3Cpath d=%27M32 14 L32 37%27 stroke=%27%23fff1d6%27 stroke-width=%273%27/%3E%3Ccircle cx=%2732%27 cy=%2746%27 r=%274%27 fill=%27%237fd6ff%27/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=Manrope:wght@400;600;800&display=swap">
+<style>
+  :root { --ink: #0d1328; --panel: #151d3a; --line: rgba(255,255,255,.12); --text: #fff1d6; --dim: #a9b4cc; --apricot: #ff9d5c; --sky: #7fd6ff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ink); color: var(--text); font: 400 17px/1.65 Manrope, system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 40px 20px 64px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+  .logo { font: 900 44px/1 'Big Shoulders Display', Impact, sans-serif; text-transform: uppercase; color: var(--text); text-decoration: none; }
+  .logo i { font-style: normal; color: var(--apricot); }
+  .play { display: inline-block; padding: 12px 22px; border-radius: 12px; background: var(--apricot); color: #2a1406; font-weight: 800; text-decoration: none; text-transform: uppercase; letter-spacing: .08em; }
+  h1 { font: 900 clamp(40px, 7vw, 64px)/1 'Big Shoulders Display', Impact, sans-serif; text-transform: uppercase; margin: 8px 0 12px; }
+  h2 { font: 800 30px/1.1 'Big Shoulders Display', Impact, sans-serif; text-transform: uppercase; margin: 40px 0 12px; color: var(--sky); }
+  p, li { color: #dfe7f7; }
+  .lead { font-size: 19px; color: var(--dim); }
+  img { width: 100%; height: auto; border-radius: 16px; border: 1px solid var(--line); margin: 12px 0 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { white-space: nowrap; width: 1%; }
+  kbd { display: inline-block; min-width: 28px; padding: 2px 8px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); font: 800 14px/1.5 Manrope, sans-serif; text-align: center; color: var(--text); }
+  .worlds { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; padding: 0; list-style: none; }
+  .worlds li { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+  .worlds b { display: block; font: 800 22px/1.1 'Big Shoulders Display', Impact, sans-serif; text-transform: uppercase; color: var(--text); }
+  .worlds small { color: var(--dim); }
+  footer { margin-top: 48px; color: var(--dim); font-size: 14px; }
+  a { color: var(--sky); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <a class="logo" href="./">Flung<i>8</i></a>
+    <a class="play" href="./">Play free</a>
+  </header>
+
+  <h1>How to play Flung8</h1>
+  <p class="lead">Flung8 is a free 3D glider game that runs in your browser. No download, no sign-up. Fly rings through 7 worlds, race other pilots live, or just glide around in Open Sky.</p>
+  <img src="og.jpg" width="1200" height="630" alt="The Flung8 glider flying past floating islands above the clouds">
+
+  <h2>Keyboard controls</h2>
+  <table>
+    <tr><td><kbd>W</kbd> <kbd>S</kbd></td><td>Dive / climb (you can swap these in Settings)</td></tr>
+    <tr><td><kbd>A</kbd> <kbd>D</kbd></td><td>Turn left / right</td></tr>
+    <tr><td><kbd>T</kbd></td><td>Switch steering: steep bank, free roll, sharp turn</td></tr>
+    <tr><td><kbd>Q</kbd> <kbd>E</kbd></td><td>Barrel roll left / right (hold)</td></tr>
+    <tr><td><kbd>Space</kbd></td><td>Boost (uses the boost bar)</td></tr>
+    <tr><td><kbd>Shift</kbd></td><td>Air brake, for tighter turns</td></tr>
+    <tr><td><kbd>C</kbd></td><td>Change camera</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Back to the last ring</td></tr>
+    <tr><td><kbd>P</kbd></td><td>Photo mode</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Pause</td></tr>
+  </table>
+
+  <h2>Phone and tablet</h2>
+  <p>Use the arrow buttons at the bottom left: left and right turn, up dives, down climbs. Hold BOOST and BRAKE on the right. CAM changes the camera and BACK returns you to the last ring.</p>
+
+  <h2>Gamepad</h2>
+  <p>Left stick steers. Right trigger or A boosts, left trigger brakes. Bumpers or the right stick do barrel rolls. Y changes camera, B goes back to the last ring, X opens photo mode and Start pauses.</p>
+
+  <h2>How gliding works</h2>
+  <p>Your glider has no engine. Diving turns height into speed, and climbing spends it. Fly too slow and the wing stalls and drops its nose. Thermals (columns of rising sparkles) and cyan lift rings give height back. Your boost bar refills from rings and thermals.</p>
+  <p>Style scores points: barrel rolls, loops, flying upside down, skimming the ground or the waves, near misses and power dives. Flying through rings in a row builds a multiplier.</p>
+
+  <h2>Game modes</h2>
+  <ul>
+    <li><b>Courses</b>: fly through every ring as fast as you can and earn bronze, silver and gold medals.</li>
+    <li><b>Open Sky</b>: free flight with other pilots online, up to 8 per server.</li>
+    <li><b>Race</b>: race other pilots live through the same rings.</li>
+  </ul>
+
+  <h2>The 7 worlds and 14 courses</h2>
+  <p>Each world has an easy Line course with wide rings and a hard Gauntlet course that is low, tight and fast.</p>
+  <ul class="worlds">
+    <li><b>Cloud Harbor</b><small>Floating islands above the clouds. Mooring Line · Gull Gauntlet</small></li>
+    <li><b>Ember Canyon</b><small>Red desert canyons. Mesa Drift · Needle's Eye</small></li>
+    <li><b>Frostwing Peaks</b><small>Snowy mountains. Pinewind · Avalanche Run</small></li>
+    <li><b>Lantern Bay</b><small>Sunset coast. Harbor Lights · Reef Skimmer</small></li>
+    <li><b>Thunderhead</b><small>Storm clouds and lightning. Squall Line · Eye of the Storm</small></li>
+    <li><b>Aurora Fjord</b><small>Night fjord under the northern lights. Northern Glide · Moonlit Chasm</small></li>
+    <li><b>Sunken Spires</b><small>A green valley of stone pillars. Temple Weave · Thousand Pillars</small></li>
+  </ul>
+
+  <h2>Gliders, paint and coins</h2>
+  <p>Earn coins by finishing runs, flying rings, doing tricks, daily challenges and levelling up. Spend them in the shop on new gliders, paints and trails. Every item can be bought; there is no real money in the game.</p>
+
+  <p style="margin-top:40px"><a class="play" href="./">Play Flung8 now</a></p>
+  <footer>Flung8 · a free browser glider game</footer>
+</main>
+</body>
+</html>
