@@ -678,17 +678,32 @@ function placeShards(W, def, rnd) {
     let x, y, z;
     if (W.islands && W.islands.length && mode < 0.4) {
       const isl = rnd.pick(W.islands);
-      if (rnd() < 0.5) { x = isl.x; z = isl.z; y = isl.bottom - rnd.range(8, 16); } else { const a = rnd() * TAU; x = isl.x + Math.cos(a) * isl.r * 0.4; z = isl.z + Math.sin(a) * isl.r * 0.4; y = isl.top + rnd.range(10, 16); }
+      if (rnd() < 0.5) { x = isl.x; z = isl.z; y = isl.bottom - rnd.range(8, 16); } else { const a = rnd() * TAU; x = isl.x + Math.cos(a) * isl.r * 0.4; z = isl.z + Math.sin(a) * isl.r * 0.4; y = liftClear(W, x, isl.top + rnd.range(10, 16), z); }
     } else if (W.spireTops && mode < 0.65) {
       const s = rnd.pick(W.spireTops); x = s.x; z = s.z; y = s.y + 12;
     } else {
       x = rnd.range(-1300, 1300); z = rnd.range(-1300, 1300);
       y = W.floorAt(x, z) + rnd.range(8, 22);
       if (def.kind === 'islands') y = rnd.range(30, 120);
+      y = liftClear(W, x, y, z);
     }
     if (!ok(x, y, z)) continue;
     W.shards.push({ id: W.shards.length, pos: new THREE.Vector3(x, y, z), mesh: null, beam: null });
   }
+}
+
+/* clearance only measures straight down to the ground, so a shard can sit beside a canyon wall or inside a tree: lift it until there is room all round */
+function liftClear(W, x, y, z) {
+  const trees = (W.trees || []).filter(t => Math.hypot(t[0] - x, t[2] - z) < t[3] * 1.2 + 6);
+  const roomy = y => {
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * TAU;
+      if (W.heightAt(x + Math.cos(a) * 10, z + Math.sin(a) * 10) > y - 6 || W.heightAt(x + Math.cos(a) * 22, z + Math.sin(a) * 22) > y - 3) return false;
+    }
+    return !trees.some(t => y < t[1] + t[3] * 1.8 + 6);
+  };
+  for (let k = 0; k < 40 && !roomy(y); k++) y += 3;
+  return y;
 }
 
 function buildLights(W, def) {

@@ -1,11 +1,10 @@
 'use strict';
-/* Flung8 — keyboard, mouse, touch stick and gamepad merged into one control state. */
+/* Flung8 — keyboard, mouse, touch buttons and gamepad merged into one control state. */
 
 const Input = (() => {
   const keys = new Set(), pressed = new Set();
   const taps = new Set();
-  const held = { boost: false, brake: false };
-  const stick = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
+  const held = { boost: false, brake: false, left: false, right: false, up: false, down: false };
   const mouse = { x: 0, y: 0, l: false, r: false, seen: false };
   const padPrev = [];
   let padAxPrev = { x: 0, y: 0 };
@@ -23,32 +22,21 @@ const Input = (() => {
       if (G.state === 'play' && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', e => keys.delete(e.code));
-    window.addEventListener('blur', () => { keys.clear(); stick.id = null; held.boost = held.brake = false; mouse.l = mouse.r = false; });
+    window.addEventListener('blur', () => { keys.clear(); for (const k in held) held[k] = false; mouse.l = mouse.r = false; });
     window.addEventListener('pointerdown', e => { Sfx.init(); if (e.pointerType === 'touch' && mode !== 'touch') setMode('touch'); }, true);
     try { if (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches) setMode('touch'); } catch (e) { /* ignore */ }
 
     canvas.addEventListener('pointerdown', e => {
-      if (e.pointerType === 'touch') {
-        if (stick.id === null && e.clientX < G.W * 0.6) { stick.id = e.pointerId; stick.ox = stick.x = e.clientX; stick.oy = stick.y = e.clientY; }
-        e.preventDefault(); return;
-      }
+      if (e.pointerType === 'touch') { e.preventDefault(); return; }
       mouse.x = e.clientX; mouse.y = e.clientY; mouse.seen = true;
       if (e.button === 0) mouse.l = true;
       if (e.button === 2) mouse.r = true;
     });
     canvas.addEventListener('pointermove', e => {
-      if (e.pointerType === 'touch') {
-        if (e.pointerId === stick.id) {
-          stick.x = e.clientX; stick.y = e.clientY;
-          const lim = 70, dx = stick.x - stick.ox, dy = stick.y - stick.oy, d = Math.hypot(dx, dy);
-          if (d > lim * 1.25) { stick.ox = stick.x - dx / d * lim * 1.25; stick.oy = stick.y - dy / d * lim * 1.25; }
-        }
-        e.preventDefault(); return;
-      }
+      if (e.pointerType === 'touch') { e.preventDefault(); return; }
       mouse.x = e.clientX; mouse.y = e.clientY; mouse.seen = true;
     });
     const up = e => {
-      if (e.pointerId === stick.id) stick.id = null;
       if (e.pointerType !== 'touch') { if (e.button === 0) mouse.l = false; if (e.button === 2) mouse.r = false; }
     };
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
@@ -78,10 +66,11 @@ const Input = (() => {
     const st = G.settings || {};
     const invert = st.pitch === 'arcade' ? -1 : 1; // plane style: forward = dive
     let pitch = 0, roll = 0, yaw = 0;
-    if (k('KeyW') || k('ArrowUp')) pitch -= 1;
-    if (k('KeyS') || k('ArrowDown')) pitch += 1;
-    if (k('KeyA') || k('ArrowLeft')) roll -= 1;
-    if (k('KeyD') || k('ArrowRight')) roll += 1;
+    // touch arrow buttons act exactly like the arrow keys
+    if (k('KeyW') || k('ArrowUp') || held.up) pitch -= 1;
+    if (k('KeyS') || k('ArrowDown') || held.down) pitch += 1;
+    if (k('KeyA') || k('ArrowLeft') || held.left) roll -= 1;
+    if (k('KeyD') || k('ArrowRight') || held.right) roll += 1;
     if (k('KeyQ')) yaw += 1;
     if (k('KeyE')) yaw -= 1;
     pitch *= invert;
@@ -92,12 +81,6 @@ const Input = (() => {
       if (!roll) roll = dz(mx);
       if (!pitch) pitch = -dz(my) * invert * -1;
       boost = boost || mouse.l; brake = brake || mouse.r;
-    }
-    if (stick.id !== null) {
-      const lim = 70;
-      const dx = clamp((stick.x - stick.ox) / lim, -1, 1), dy = clamp((stick.y - stick.oy) / lim, -1, 1);
-      const dz = v => (Math.abs(v) < 0.1 ? 0 : (v - Math.sign(v) * 0.1) / 0.9);
-      roll = dz(dx); pitch = dz(dy) * invert;
     }
     let cam = w('KeyC') || taps.has('cam'), reset = w('KeyR') || taps.has('reset'), pause = w('Escape') || taps.has('pause');
     let photo = w('KeyP') || taps.has('photo'), map = w('KeyM') || taps.has('map'), steer = w('KeyT');
@@ -137,5 +120,5 @@ const Input = (() => {
     Object.assign(S, { pitch: clamp(pitch, -1, 1), roll: clamp(roll, -1, 1), yaw: clamp(yaw, -1, 1), boost, brake, cam, reset, pause, photo, map, ok, back, nav, board, steer });
   }
   function endFrame() { pressed.clear(); taps.clear(); }
-  return { bind, update, endFrame, setMode, state: S, stick, get mode() { return mode; } };
+  return { bind, update, endFrame, setMode, state: S, get mode() { return mode; } };
 })();

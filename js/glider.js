@@ -136,10 +136,13 @@ function flyPilot(p, ctl, dt, W, assist) {
   if (assist && Math.abs(ctl.pitch) < 0.08 && p.up.y > 0.4 && Math.abs(p.fwd.y) < 0.5) tPitch += -p.fwd.y * 0.35;
   // a stalled wing drops its nose
   if (p.stall > 0 && p.fwd.y > -0.7) tPitch -= p.stall * 1.3;
-  // W/S climb and dive stop at MAX_PITCH, so holding them can't carry the nose over into a loop
+  // W/S climb and dive stop at MAX_PITCH, so holding them can't carry the nose over into a loop.
+  // The climb limit also shrinks as speed bleeds off, so a held climb eases into a shallow climb instead of stalling and see-sawing.
   const pa = Math.asin(clamp(p.fwd.y, -1, 1));
-  tPitch *= clamp((MAX_PITCH - pa * Math.sign(tPitch)) / 0.25, 0, 1);
-  if (Math.abs(pa) > MAX_PITCH && p.wp * pa > 0) p.wp = 0;
+  const capUp = lerp(0, MAX_PITCH, smooth(F.stall + 6, F.stall + 28, p.speed));
+  if (tPitch > 0) tPitch = Math.min(tPitch * clamp((capUp - pa) / 0.25, 0, 1), (capUp - pa) * 2.5);
+  else tPitch *= clamp((MAX_PITCH + pa) / 0.25, 0, 1);
+  if ((pa > capUp && p.wp > 0) || (pa < -MAX_PITCH && p.wp < 0)) p.wp = 0;
   p.wp = damp(p.wp, tPitch, 9, dt);
   p.wr = damp(p.wr, tRoll, 11, dt);
   _e.set(p.wp * dt, 0, -p.wr * dt, 'XYZ');

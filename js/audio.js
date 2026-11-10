@@ -123,11 +123,47 @@ const Sfx = (() => {
   /* ---------- generative music ---------- */
   let musicRoot = 62, musicMode = 'major', musicTimer = null, nextBar = 0, bar = 0, intensity = 0, chordIdx = 0;
   const PROG = [[0, 4, 2], [5, 2, 4], [3, 5, 0], [4, 1, 6]]; // scale degrees for chords (root, third-ish, fifth-ish)
+  // music player styles: calm = the original ambient score, upbeat = drums and bass, night = slow minor bells, off = silence
+  const STYLES = ['calm', 'upbeat', 'night', 'off'];
+  let style = 'calm';
+  function setStyle(s) { if (STYLES.includes(s)) style = s; }
   function setSong(root, mode) { musicRoot = root; musicMode = mode; }
   function setIntensity(i) { intensity = i; }
-  function deg(d) { const sc = MODES[musicMode] || MODES.major; const oct = Math.floor(d / sc.length); return sc[((d % sc.length) + sc.length) % sc.length] + 12 * oct; }
-  function pad(freq, t0, dur, g) {
-    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900 + intensity * 500; f.Q.value = 0.3;
+  function deg(d, mode) { const sc = MODES[mode || musicMode] || MODES.major; const oct = Math.floor(d / sc.length); return sc[((d % sc.length) + sc.length) % sc.length] + 12 * oct; }
+  function mtone(freq, t0, dur, { type = 'sine', g = 0.05, glide = 0, wet = 0.3 } = {}) {
+    const o = ctx.createOscillator(), gn = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t0);
+    if (glide) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq * glide), t0 + dur);
+    gn.gain.setValueAtTime(0.0001, t0); gn.gain.exponentialRampToValueAtTime(g, t0 + 0.008); gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(gn); gn.connect(musicBus);
+    if (wet) { const w = ctx.createGain(); w.gain.value = wet; gn.connect(w); w.connect(verbSend); }
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  function hat(t0, g) {
+    const s = ctx.createBufferSource(); s.buffer = noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000;
+    const gn = ctx.createGain(); gn.gain.setValueAtTime(g, t0); gn.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.06);
+    s.connect(f); f.connect(gn); gn.connect(musicBus); s.start(t0, Math.random()); s.stop(t0 + 0.08);
+  }
+  function upbeatBar(t0) {
+    const barLen = 2.2, beat = barLen / 4, rootDeg = PROG[chordIdx++ % PROG.length][0];
+    for (let b = 0; b < 4; b++) {
+      if (b % 2 === 0) mtone(130, t0 + b * beat, 0.32, { g: 0.14, glide: 0.3, wet: 0 }); // kick
+      hat(t0 + b * beat + beat / 2, 0.035); hat(t0 + b * beat, 0.02);
+      mtone(mtof(musicRoot - 24 + deg(rootDeg)), t0 + b * beat, beat * 0.9, { type: 'triangle', g: 0.07, wet: 0 }); // bass
+    }
+    [0, 2, 4].forEach((k, i) => pad(mtof(musicRoot - 12 + deg(rootDeg + k)), t0, barLen + 0.3, 0.018 - i * 0.003));
+    for (let i = 0; i < 8; i++) if (Math.random() < 0.6) pluck(mtof(musicRoot + 12 + deg(rootDeg + [0, 2, 4, 7][Math.floor(Math.random() * 4)])), t0 + i * beat / 2, 0.04);
+    return barLen;
+  }
+  function nightBar(t0) {
+    const barLen = 6.4, rootDeg = PROG[chordIdx++ % PROG.length][0];
+    [0, 2, 4].forEach((k, i) => pad(mtof(musicRoot - 15 + deg(rootDeg + k, 'minor')), t0, barLen + 0.8, 0.024 - i * 0.004, 520));
+    for (let i = 0; i < 3; i++) if (Math.random() < 0.7) mtone(mtof(musicRoot + 9 + deg(rootDeg + [0, 2, 4, 6][Math.floor(Math.random() * 4)], 'minor')), t0 + i * 2.1 + Math.random() * 0.3, 3.2, { g: 0.045, wet: 1 }); // bells
+    return barLen;
+  }
+  function pad(freq, t0, dur, g, cutoff) {
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cutoff || 900 + intensity * 500; f.Q.value = 0.3;
     const gn = ctx.createGain();
     gn.gain.setValueAtTime(0.0001, t0); gn.gain.linearRampToValueAtTime(g, t0 + dur * 0.35); gn.gain.linearRampToValueAtTime(0.0001, t0 + dur);
     for (const det of [-6, 5]) {
@@ -146,6 +182,8 @@ const Sfx = (() => {
     o.start(t0); o.stop(t0 + 1.5);
   }
   function scheduleBar(t0) {
+    if (style === 'upbeat') return upbeatBar(t0);
+    if (style === 'night') return nightBar(t0);
     const barLen = 4.8;
     const ch = PROG[chordIdx % PROG.length];
     chordIdx++;
@@ -166,9 +204,14 @@ const Sfx = (() => {
     nextBar = ctx.currentTime + 0.3;
     musicTimer = setInterval(() => {
       if (!ctx || ctx.state !== 'running') return;
+      if (style === 'off') { nextBar = ctx.currentTime + 0.3; return; }
       while (nextBar < ctx.currentTime + 0.6) nextBar += scheduleBar(nextBar);
     }, 200);
   }
 
-  return Object.assign(S, { init, setVolumes, setFlight, setSong, setIntensity, get ready() { return !!ctx; } });
+  // getters must stay live: Object.assign would copy their value once
+  Object.assign(S, { init, setVolumes, setFlight, setSong, setIntensity, setStyle, STYLES });
+  Object.defineProperty(S, 'style', { get: () => style });
+  Object.defineProperty(S, 'ready', { get: () => !!ctx });
+  return S;
 })();

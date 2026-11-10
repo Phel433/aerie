@@ -357,7 +357,7 @@ function passRing(run, r) {
   run.next++;
   run.lastRing = r;
   run.splits.push(run.t);
-  run.stats.rings++;
+  run.stats.rings++; run.coins = (run.coins || 0) + 1;
   run.combo = run.t - run.comboT < 8000 || run.combo === 0 ? Math.min(run.combo + 1, 8) : 1;
   run.comboT = run.t;
   run.stats.combo = Math.max(run.stats.combo, run.combo);
@@ -384,7 +384,7 @@ function stepAttackRings(run, prev, p) {
       run.combo = run.t - run.comboT < 6000 ? Math.min(run.combo + 1, 8) : 1;
       run.comboT = run.t;
       run.stats.combo = Math.max(run.stats.combo, run.combo);
-      run.stats.rings++;
+      run.stats.rings++; run.coins = (run.coins || 0) + 1;
       const base = r.type === 'gold' ? 800 : 250;
       run.score += base * (1 + run.combo * 0.5);
       p.boost = Math.min(1, p.boost + (r.type === 'gold' ? 0.5 : 0.15));
@@ -403,6 +403,7 @@ function award(run, name, pts) {
   const mult = 1 + run.combo * 0.25;
   const v = Math.round(pts * mult);
   run.score += v; run.stats.style += v;
+  run.coins = (run.coins || 0) + 1;
   run.xpPending += pts / 40;
   UI.feed(name, v, mult > 1 ? 'x' + mult.toFixed(2).replace(/\.?0+$/, '') : '');
 }
@@ -554,8 +555,10 @@ function updateGhost(run) {
 }
 
 /* ---------- finishing ---------- */
-function commitRunStats(run) {
+/* banks the run's ring and trick coins plus a finishing bonus; run.coinsEarned feeds the results screen */
+function commitRunStats(run, bonus) {
   const st = run.stats, s = G.save.stats;
+  run.coinsEarned = addCoins((run.coins || 0) + (bonus || 0));
   s.km += st.km; s.rings += st.rings; s.maxSpeed = Math.max(s.maxSpeed, st.maxSpeed); s.time += run.t / 1000;
   challengeStat('rings', st.rings); challengeStat('km', st.km); challengeStat('skim', st.skim + st.wave);
   challengeStat('thermal', st.thermal); challengeStat('speed', st.maxSpeed, true); challengeStat('combo', st.combo, true);
@@ -582,7 +585,7 @@ function finishCourse() {
   if (medal && (!prevMedal || MEDAL_RANK[medal] > MEDAL_RANK[prevMedal])) xp += 150;
   Sfx.finish();
   if (medal) setTimeout(() => Sfx.medal(), 500);
-  commitRunStats(run);
+  commitRunStats(run, 20 + (medal ? { bronze: 10, silver: 20, gold: 35, plat: 50 }[medal] : 0));
   challengeStat('courses', 1);
   if (run.cdef.kind === 'gauntlet') challengeStat('gauntlets', 1);
   if (medal === 'gold' || medal === 'plat') challengeStat('golds', 1);
@@ -626,7 +629,7 @@ function finishAttack() {
   const pb = score > prev;
   if (pb) G.save.attack[wid] = score;
   const xp = 120 + Math.round(score / 70) + Math.round(run.xpPending);
-  commitRunStats(run);
+  commitRunStats(run, 15 + Math.floor(score / 2000));
   challengeStat('attack', score, true);
   if (score >= 25000) grantAch('score25');
   if (score >= 60000) grantAch('score60');
@@ -642,7 +645,7 @@ function endFreeFlight() {
   const run = G.run;
   run.phase = 'done'; run.finished = true;
   const xp = 40 + Math.round(run.xpPending) + Math.round(run.stats.km * 25);
-  commitRunStats(run);
+  commitRunStats(run, Math.min(20, Math.floor(run.stats.km * 2)));
   if (run.mode === 'sky') challengeStat('opensky', run.skyT || 0);
   const ups = addXp(xp);
   saveProgress();
@@ -704,7 +707,7 @@ function finishRace() {
   Net.setRacePresence({ st: 'done', ft: ms, ri: run.rings.length });
   Net.streamPilot(G.player.p, { st: 'done', ft: ms, ri: run.rings.length });
   Sfx.finish();
-  commitRunStats(run);
+  commitRunStats(run, 30);
   G.save.stats.races++;
   grantAch('race_done');
   // personal best on the course counts too
@@ -797,8 +800,8 @@ function cycleCamera() {
 function updateCamera(dt) {
   const cam = G.camera, p = G.player.p, W = G.world;
   let mode = G.camMode;
-  if (G.state === 'title' || G.state === 'menu') mode = 'title';
-  if (G.state === 'locker') mode = 'locker';
+  if (G.state === 'menu') mode = 'title';
+  if (G.state === 'locker' || G.state === 'title') mode = 'locker';
   if (G.run && G.run.mode === 'race' && G.run.phase === 'lobby') mode = 'locker';
   let fov = G.settings.fov + clamp((p.speed - 32) * 0.28, -4, 24) + (p.boosting ? 5 : 0);
   if (mode === 'cockpit') {
@@ -836,16 +839,19 @@ function updateCamera(dt) {
     cam.position.copy(G.camPos); cam.up.copy(WORLD_UP); cam.lookAt(p.pos);
     fov = 55;
   } else if (mode === 'locker') {
-    const t = performance.now() / 1000;
-    const R = G.state === 'locker' ? 13 : 22;
-    cam.position.set(p.pos.x + Math.sin(t * 0.35) * R, p.pos.y + 3.5, p.pos.z + Math.cos(t * 0.35) * R);
+    // basecamp and locker: the camera rides along with the circling glider (G.menuYaw, drag to turn)
+    const parked = G.state === 'title' || G.state === 'locker';
+    // step back on narrow (phone) screens so the whole wingspan fits across
+    const halfW = Math.atan(Math.tan(cam.fov * Math.PI / 360) * cam.aspect);
+    const a = parked ? (G.park ? G.park.t - Math.PI / 2 : 0) + (G.menuYaw || 0) : performance.now() / 1000 * 0.35, R = parked ? Math.max(14, 8 / Math.tan(halfW)) : 22;
+    cam.position.set(p.pos.x + Math.sin(a) * R, p.pos.y + (parked ? 2.4 : 3.2), p.pos.z + Math.cos(a) * R);
     cam.up.copy(WORLD_UP);
-    // keep the glider in the open right-hand side of the screen when a panel covers the left
-    const shift = G.state === 'locker' && G.W > 700 ? 4.8 : 0;
-    _a.set(Math.cos(t * 0.35), 0, -Math.sin(t * 0.35)).multiplyScalar(-shift);
-    cam.lookAt(_b.copy(p.pos).add(_a));
+    cam.lookAt(_b.copy(p.pos).add(_a.set(0, 0.6, 0)));
     fov = 45;
   }
+  // slide the picture so the glider sits in the open space beside the menu cards
+  const vs = (G.state === 'title' || G.state === 'locker') && G.viewShift;
+  if (vs && (vs.x || vs.y)) cam.setViewOffset(G.W, G.H, -vs.x, -vs.y, G.W, G.H); else if (cam.view && cam.view.enabled) cam.clearViewOffset();
   if (G.shake > 0 || (p.speed > 75 && G.state === 'play')) {
     const s = (G.shake * 1.2 + smooth(75, 120, p.speed) * 0.08) * (G.settings.shake ? 1 : 0);
     cam.position.x += (Math.random() - 0.5) * s; cam.position.y += (Math.random() - 0.5) * s;
@@ -906,18 +912,30 @@ function stepAttract(dt) {
   syncPlayerMesh(dt, 0.8);
 }
 
-/* locker: park the glider in clear sky */
-function showLocker() {
-  G.state = 'locker';
-  const p = G.player.p, W = G.world;
+/* basecamp and locker: the glider circles slowly in clear sky */
+const PARK_R = 45;
+function parkGlider() {
+  const W = G.world;
+  const roomy = (x, y, z) => W.clearance(x, y, z).d > 60 && [0, 1, 2, 3, 4, 5, 6, 7].every(k => W.clearance(x + Math.sin(k * 0.785) * PARK_R, y, z + Math.cos(k * 0.785) * PARK_R).d > 40);
   let spot = null;
   for (let i = 0; i < 300 && !spot; i++) {
     const a = i * 2.4, r = i * 6, x = Math.cos(a) * r, z = Math.sin(a) * r;
     const y = Math.max(W.floorAt(x, z) + 120, W.def.spawnY);
-    if (W.clearance(x, y, z).d > 60) spot = new THREE.Vector3(x, y, z);
+    if (roomy(x, y, z)) spot = new THREE.Vector3(x, y, z);
   }
-  placePilot(p, spot || new THREE.Vector3(0, 700, 0), new THREE.Vector3(0, 0, -1));
+  G.park = { c: spot || new THREE.Vector3(0, 700, 0), t: Math.PI / 2 };
+  flyParked(0);
   G.player.trails.forEach(resetTrail);
+  if (G.menuYaw == null) G.menuYaw = 0.7;
+}
+function flyParked(dt) {
+  const k = G.park, p = G.player.p;
+  k.t += dt * 14 / PARK_R; // 14 m/s around the circle
+  p.pos.set(k.c.x + Math.sin(k.t) * PARK_R, k.c.y + Math.sin(k.t * 2.3) * 1.5, k.c.z + Math.cos(k.t) * PARK_R);
+  _e.set(Math.cos(k.t * 2.3) * 0.08, Math.atan2(-Math.cos(k.t), Math.sin(k.t)), 0.32, 'YXZ'); // nose along the circle, banked into the turn
+  p.q.setFromEuler(_e);
+  updateAxes(p);
+  p.speed = 14; p.alive = true;
 }
 
 /* ---------- ring visuals each frame ---------- */

@@ -38,13 +38,13 @@ function tick(dt) {
       stepPlay(dt);
       if (!$('ov-results').hidden || !$('lobby').hidden) UI.handleNav();
       break;
-    case 'title': case 'menu':
+    case 'menu':
       stepAttract(dt);
       UI.handleNav();
       break;
-    case 'locker':
-      p.pos.y += Math.sin(performance.now() / 700) * 0.01;
-      syncPlayerMesh(dt, 0);
+    case 'title': case 'locker':
+      if (G.park) flyParked(dt);
+      syncPlayerMesh(dt, 0.4);
       UI.handleNav();
       break;
     case 'pause':
@@ -62,7 +62,7 @@ function tick(dt) {
   if (G.state === 'photo') updatePhotoCam(); else updateCamera(dt);
   const flying = G.state === 'play' && G.run && G.run.phase === 'fly' && p.alive;
   SpeedLines.update(dt, flying ? p.speed : 0, flying && p.boosting);
-  Sfx.setFlight(p.speed, p.boosting, p.stall, flying && p.clear < 9 ? 1 - p.clear / 9 : 0, G.state === 'play' || G.state === 'title' || G.state === 'menu');
+  Sfx.setFlight(p.speed, p.boosting, p.stall, flying && p.clear < 9 ? 1 - p.clear / 9 : 0, G.state === 'play' || G.state === 'menu');
   UI.updateHud(dt);
   G.renderer.render(G.scene, G.camera);
 }
@@ -93,11 +93,11 @@ function boot() {
   SpeedLines.init();
   G.player = { p: makePilot(G.save.frame), mesh: null, trails: [] };
   rebuildPlayerMesh();
-  Sfx.setVolumes(G.settings.master, G.settings.music, G.settings.sfx);
+  Sfx.setVolumes(G.settings.muted ? 0 : G.settings.master, G.settings.music, G.settings.sfx);
   startAttract(G.save.lastWorld || 'harbor');
   checkNewUnlocks(false);
   resize();
-  window.addEventListener('resize', resize);
+  window.addEventListener('resize', () => { resize(); UI.layoutStage(); });
   UI.open('title');
   $('loading').hidden = true;
   requestAnimationFrame(t => { lastT = t; requestAnimationFrame(frame); });

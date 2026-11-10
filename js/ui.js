@@ -2,6 +2,14 @@
 /* Flung8 — menus, HUD, results and overlays. */
 
 const $ = id => document.getElementById(id);
+/* map spots for the seven worlds, in a 1000 x 620 picture */
+const MAP_POS = [[150, 440], [300, 230], [500, 120], [470, 420], [680, 270], [860, 130], [830, 470]];
+/* little colour sample for a frame, paint or trail */
+function swatchHtml(kind, it) {
+  if (kind === 'Paint') return '<div class="swatch" style="background:linear-gradient(90deg,' + it.a + ' 0 60%,' + it.b + ' 60%)"></div>';
+  if (kind === 'Trail') { const cs = it.colors || [PAINT_BY_ID[G.save.paint].a, PAINT_BY_ID[G.save.paint].b]; return '<div class="swatch" style="background:linear-gradient(90deg,' + cs.join(',') + (cs.length === 1 ? ',transparent' : '') + ')"></div>'; }
+  return '<div class="swatch" style="background:linear-gradient(90deg,#f6efe2,#a9b6d3)"></div>';
+}
 const UI = {
   screen: null, stack: [], selWorld: null, lockerTab: 'frames', boardTab: null, pilotTab: 'overview',
   hudCache: {}, feedN: 0, resetArm: false,
@@ -12,6 +20,37 @@ const UI = {
     $('cs-save').addEventListener('click', () => this.saveCallsign($('cs-input').value));
     $('cs-input').addEventListener('keydown', e => { if (e.key === 'Enter') this.saveCallsign($('cs-input').value); });
     $('photo-hint').addEventListener('click', () => { if (G.state === 'photo') exitPhoto(); });
+    // top bar, drawer, music player
+    document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { Sfx.init(); Sfx.click(); this.tab(b.dataset.tab); }));
+    $('menu-btn').addEventListener('click', () => { Sfx.init(); Sfx.click(); this.toggleDrawer(); });
+    $('drawer-close').addEventListener('click', () => { Sfx.click(); this.toggleDrawer(false); });
+    $('dr-mute').addEventListener('click', () => {
+      G.settings.muted = !G.settings.muted; saveSettings();
+      Sfx.setVolumes(G.settings.muted ? 0 : G.settings.master, G.settings.music, G.settings.sfx);
+      $('dr-mute').textContent = G.settings.muted ? 'Unmute sound' : 'Mute sound';
+    });
+    $('dr-full').addEventListener('click', () => {
+      try { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); } catch (e) { this.toast('Fullscreen not available', 'This browser or page does not allow it.'); }
+    });
+    $('music-btn').addEventListener('click', () => { Sfx.init(); const open = $('music-pop').hidden; $('music-pop').hidden = !open; $('music-btn').setAttribute('aria-expanded', String(open)); this.renderMusic(); });
+    const styles = Sfx.STYLES.filter(x => x !== 'off');
+    const stepStyle = d => { const cur = styles.indexOf(G.settings.musicStyle); this.setMusic(styles[(Math.max(0, cur) + d + styles.length) % styles.length]); };
+    $('mp-prev').addEventListener('click', () => stepStyle(-1));
+    $('mp-next').addEventListener('click', () => stepStyle(1));
+    $('mp-play').addEventListener('click', () => this.setMusic(Sfx.style === 'off' ? (G.settings.musicStyle === 'off' ? 'calm' : G.settings.musicStyle) : 'off', true));
+    $('mp-vol').addEventListener('input', e => { G.settings.music = parseFloat(e.target.value); saveSettings(); Sfx.setVolumes(G.settings.muted ? 0 : G.settings.master, G.settings.music, G.settings.sfx); });
+    Sfx.setStyle(G.settings.musicStyle || 'calm');
+    // basecamp: pick a mode card, then FLY
+    document.querySelectorAll('.mcard').forEach(b => b.addEventListener('click', () => { Sfx.init(); Sfx.click(); G.settings.menuMode = b.dataset.mode; saveSettings(); this.renderModeCards(); }));
+    $('fly-btn').addEventListener('click', () => { Sfx.init(); Sfx.click(); this.flyNow(); });
+    window.addEventListener('keydown', e => { if (e.key === 'Enter' && this.screen === 'title' && G.state === 'title' && !/INPUT|TEXTAREA|BUTTON/.test(e.target.tagName)) { Sfx.init(); this.flyNow(); } });
+    // drag the empty sky on the basecamp or locker to turn the glider
+    let spin = null;
+    const spinStart = e => { if (e.target === e.currentTarget || e.target.id === 'nameplate') { spin = e.clientX; this.dragging = true; } };
+    $('scr-title').addEventListener('pointerdown', spinStart);
+    $('scr-locker').addEventListener('pointerdown', spinStart);
+    window.addEventListener('pointermove', e => { if (spin == null) return; G.menuYaw = (G.menuYaw || 0) - (e.clientX - spin) * 0.01; spin = e.clientX; });
+    window.addEventListener('pointerup', () => { spin = null; this.dragging = false; });
     Net.on(() => this.onNet());
     // photo-mode orbit
     let drag = null;
@@ -30,21 +69,50 @@ const UI = {
   showOnly(name) {
     document.querySelectorAll('.screen').forEach(s => (s.hidden = s.id !== 'scr-' + name));
     this.screen = name;
+    // the top bar sits over every menu screen, never over a flight
+    $('topbar').hidden = name === 'none';
+    document.body.classList.toggle('has-topbar', name !== 'none');
+    document.querySelectorAll('.tb-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+    $('drawer').hidden = true; $('music-pop').hidden = true; $('music-btn').setAttribute('aria-expanded', 'false');
+    this.updateCoins();
   },
   go(name) {
     if (this.screen && this.screen !== name) this.stack.push(this.screen);
     this.open(name);
   },
+  tab(name) {
+    if (name === 'title') { this.home(); return; }
+    this.stack = ['title'];
+    this.open(name);
+  },
   open(name) {
     $('hud').hidden = true; $('ov-pause').hidden = true; $('ov-results').hidden = true;
-    if (name !== 'locker' && G.state === 'locker') { startAttract(G.worldId); }
+    const wasParked = G.state === 'title' || G.state === 'locker', toParked = name === 'title' || name === 'locker';
+    if (wasParked && !toParked) startAttract(G.worldId);
     G.state = name === 'title' ? 'title' : name === 'locker' ? 'locker' : 'menu';
     this.showOnly(name);
     const r = this['render_' + name];
     if (r) r.call(this);
-    if (name === 'locker') showLocker();
+    if (toParked && !wasParked) parkGlider();
+    this.layoutStage();
     this.focusFirst();
   },
+  /* where the parked glider shows on screen: in the open space beside the cards (desktop) or above them (phone) */
+  layoutStage() {
+    const W = window.innerWidth, H = window.innerHeight;
+    let gx = W / 2, gy = H / 2;
+    if (this.screen === 'title') {
+      // glider sits in the open sky between the chips row and the launch bar
+      const top = $('base-chips').getBoundingClientRect().bottom, bottom = $('launch').getBoundingClientRect().top;
+      if (bottom > top) gy = top + (bottom - top) * 0.42;
+    } else if (this.screen === 'locker' && W > 760) {
+      const right = document.querySelector('#scr-locker .wrap').getBoundingClientRect().right; gx = right + (W - right) / 2;
+    }
+    G.viewShift = { x: gx - W / 2, y: gy - H / 2 };
+    const st = $('scr-title').style;
+    st.setProperty('--gx', gx + 'px'); st.setProperty('--gy', (gy + Math.min(W, H) * (W > 760 ? 0.2 : 0.17)) + 'px');
+  },
+  updateCoins() { $('coin-count').textContent = fmtNum(G.save ? G.save.coins || 0 : 0); },
   back() {
     const prev = this.stack.pop() || 'title';
     this.open(prev);
@@ -58,11 +126,13 @@ const UI = {
   },
   handleNav() {
     const I = Input.state;
-    const vis = [...document.querySelectorAll('.overlay:not([hidden]) button:not([disabled]), #lobby:not([hidden]) button:not([disabled])')];
-    const pool = vis.length ? vis : [...document.querySelectorAll('.screen:not([hidden]) button:not([disabled])')];
+    const vis = [...document.querySelectorAll('.overlay:not([hidden]) button:not([disabled]), #lobby:not([hidden]) button:not([disabled]), #drawer:not([hidden]) button, #music-pop:not([hidden]) button')];
+    const pool = vis.length ? vis : [...document.querySelectorAll('.screen:not([hidden]) button:not([disabled]), #topbar:not([hidden]) button')];
     if (I.back && G.state !== 'play') {
       if (!$('ov-results').hidden) return;
+      if (!$('drawer').hidden || !$('music-pop').hidden) { this.toggleDrawer(false); $('music-pop').hidden = true; return; }
       if (this.screen && this.screen !== 'title') { this.back(); return; }
+      if (this.screen === 'title') { this.toggleDrawer(true); return; }
     }
     if (I.ok && document.activeElement && pool.includes(document.activeElement)) { document.activeElement.click(); return; }
     if (!I.nav || !pool.length) return;
@@ -110,81 +180,155 @@ const UI = {
   renderOnline() {
     const pill = $('online-pill');
     const c = Net.lobbyCounts();
-    if (Net.hasRoom) pill.innerHTML = '<i class="dot"></i><span>' + c.total + (c.total === 1 ? ' pilot' : ' pilots') + ' here now</span>';
+    if (Net.hasRoom) pill.innerHTML = '<i class="dot"></i><span>' + c.total + (c.total === 1 ? ' pilot' : ' pilots') + ' online</span>';
     else if (Net.status === 'offline') pill.innerHTML = '<i class="dot off"></i><span>Connecting…</span>';
     else pill.innerHTML = '<i class="dot off"></i><span>Solo mode</span>';
-    const flying = Object.values(c.worlds).reduce((a, b) => a + b, 0);
-    $('live-sub').textContent = flying ? flying + ' flying now' : 'Open Sky · Races';
+    this.renderModeCards();
   },
 
-  /* ---------- title ---------- */
+  /* ---------- basecamp (title) ---------- */
   render_title() {
     const s = G.save;
     $('cs-row').hidden = !!s.callsign;
-    $('level-pill').innerHTML = 'Level <b class="num">' + s.level + '</b>' + (s.callsign ? ' · ' + escapeHtml(s.callsign) : '');
+    const need = xpForLevel(s.level), max = s.level >= MAX_LEVEL;
+    $('t-level').textContent = s.level;
+    $('t-xpbar').style.width = (max ? 100 : Math.min(100, s.xp / need * 100)) + '%';
+    $('t-xptext').textContent = max ? 'Top level reached' : fmtNum(need - s.xp) + ' XP to level ' + (s.level + 1);
+    const dk = todayKey(), dd = dailyCourseDef(dk), dBest = s.best[dd.id];
+    $('t-daily').innerHTML = '<span class="chip-text"><span class="k">Daily</span><b>' + escapeHtml(WORLD_BY_ID[dd.world].name) + '</b><small>' + COURSE_KINDS[dd.kind].label + ' · ' + (dBest ? 'best ' + fmtTime(dBest) : 'not flown yet') + '</small></span>';
+    $('t-daily').onclick = () => { Sfx.init(); Sfx.click(); this.launch({ mode: 'course', courseId: dd.id }); };
+    const deal = shopDeals().find(d => !owns(d.kind, d.item));
+    $('t-deal').innerHTML = deal
+      ? swatchHtml(deal.kind, deal.item) + '<span class="chip-text"><span class="k">Deal</span><b>' + escapeHtml(deal.name) + '</b><small>' + deal.kind + ' · ' + fmtNum(deal.price) + ' coins</small></span>'
+      : '<span class="chip-text"><span class="k">Shop</span><b>All deals owned</b><small>New deals tomorrow</small></span>';
+    $('t-deal').onclick = () => { Sfx.init(); Sfx.click(); this.tab('shop'); };
+    $('t-name').textContent = s.callsign || 'Pilot';
+    $('t-frame').textContent = (FRAME_BY_ID[s.frame] || FRAMES[0]).name + ' · ' + (PAINT_BY_ID[s.paint] || PAINTS[0]).name;
     const w = WORLD_BY_ID[G.worldId];
     $('title-world').textContent = w ? 'Now over ' + w.name : '';
     this.renderOnline();
   },
+  renderModeCards() {
+    const mode = G.settings.menuMode || 'courses', by = this.lobbyBy();
+    const sum = o => Object.values(o).reduce((a, b) => a + b, 0);
+    document.querySelectorAll('.mcard').forEach(b => { const on = b.dataset.mode === mode; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
+    $('mc-courses').textContent = medalCount() + ' / ' + COURSES.length + ' medals · 7 worlds';
+    const sky = sum(by.sky), race = sum(by.race);
+    $('mc-sky').textContent = !Net.hasRoom ? 'Offline · you fly alone' : sky ? sky + ' flying now' : 'Fly with anyone online';
+    $('mc-race').textContent = !Net.hasRoom ? 'Offline · needs live play' : race ? race + ' in race rooms' : 'Race other pilots live';
+  },
+  flyNow() {
+    this.mapIntent = G.settings.menuMode || 'courses';
+    this.go('fly');
+  },
+  toggleDrawer(open) {
+    const d = $('drawer');
+    d.hidden = open == null ? !d.hidden : !open;
+    $('dr-mute').textContent = G.settings.muted ? 'Unmute sound' : 'Mute sound';
+    if (!d.hidden && Input.mode !== 'touch') d.querySelector('button').focus();
+  },
+  setMusic(style, fromPlay) {
+    if (style !== 'off' || !fromPlay) G.settings.musicStyle = style;
+    Sfx.setStyle(style); saveSettings();
+    this.renderMusic();
+  },
+  renderMusic() {
+    const st = Sfx.style, names = { calm: 'Calm', upbeat: 'Upbeat', night: 'Night', off: 'Off' };
+    const desc = { calm: 'Soft pads and slow plucks', upbeat: 'Drums, bass and a quick melody', night: 'Slow bells in a minor key', off: 'Music is paused' };
+    $('music-name').textContent = names[st];
+    $('mp-style').textContent = names[st];
+    $('mp-desc').textContent = desc[st];
+    $('mp-vol').value = G.settings.music;
+    $('mp-play').setAttribute('aria-label', st === 'off' ? 'Play music' : 'Pause music');
+    $('mp-icon').innerHTML = st === 'off' ? '<path d="M6 4l10 6-10 6z" fill="currentColor"/>' : '<path d="M6 4h3v12H6zM11 4h3v12h-3z" fill="currentColor"/>';
+  },
 
-  /* ---------- fly ---------- */
+  /* ---------- world map (after FLY) ---------- */
   render_fly() {
+    const intent = this.mapIntent || G.settings.menuMode || 'courses';
     if (!this.selWorld) this.selWorld = G.save.lastWorld || 'harbor';
-    const dk = todayKey(), dd = dailyCourseDef(dk), dw = WORLD_BY_ID[dd.world];
-    const dBest = G.save.best[dd.id];
-    $('daily-card').innerHTML = '<div class="row" style="justify-content:space-between"><div><div class="label">Daily course · ' + dk.slice(0, 4) + '-' + dk.slice(4, 6) + '-' + dk.slice(6) + '</div><div style="font-family:var(--display);font-size:30px;font-weight:800;text-transform:uppercase">' + escapeHtml(dw.name) + ' · ' + COURSE_KINDS[dd.kind].label + '</div><div class="muted">One new course a day, the same for everyone. ' + (dBest ? 'Your best today: <b class="num">' + fmtTime(dBest) + '</b>' : 'Not flown yet.') + '</div></div><button class="btn" id="daily-go">Fly daily</button></div>';
-    $('daily-go').onclick = () => { Sfx.click(); this.launch({ mode: 'course', courseId: dd.id }); };
-    const wrap = $('worlds');
-    wrap.innerHTML = '';
-    for (const w of WORLDS) {
+    $('map-title').textContent = intent === 'sky' ? 'Open Sky' : intent === 'race' ? 'Race rooms' : 'Pick a world';
+    $('map-mode').textContent = intent === 'sky' ? 'Free flight with others' : intent === 'race' ? 'Live races' : 'Courses';
+    const by = this.lobbyBy();
+    // islands drawn from a seeded outline, one per world, joined by a dotted route
+    let svg = '<path d="' + MAP_POS.map((q, i) => (i ? 'L' : 'M') + q[0] + ' ' + q[1]).join(' ') + '" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="3" stroke-dasharray="2 12" stroke-linecap="round"/>';
+    WORLDS.forEach((w, i) => {
+      const [cx, cy] = MAP_POS[i], r = RNG(hashStr(w.id + 'map'));
+      const blob = (rad, k) => { let d = ''; for (let a = 0; a < 16; a++) { const t = a / 16 * TAU, rr = rad * (0.78 + r() * 0.34) * k; d += (a ? 'L' : 'M') + (cx + Math.cos(t) * rr * 1.25).toFixed(1) + ' ' + (cy + Math.sin(t) * rr * 0.8).toFixed(1); } return d + 'Z'; };
+      const sea = w.water ? w.water.color : w.cloudSea || '#dfe8f2';
+      svg += '<path d="' + blob(92, 1) + '" fill="' + sea + '" opacity="0.35"/>';
+      svg += '<path d="' + blob(70, 1) + '" fill="' + w.land.low + '" stroke="rgba(255,255,255,0.5)" stroke-width="2"/>';
+      svg += '<path d="' + blob(44, 1) + '" fill="' + w.land.mid + '"/>';
+      svg += '<path d="' + blob(20, 1) + '" fill="' + w.land.peak + '"/>';
+    });
+    $('map-svg').innerHTML = svg;
+    const pins = $('map-pins'); pins.innerHTML = '';
+    WORLDS.forEach((w, i) => {
       const ok = worldUnlocked(w);
+      const medals = ['line', 'gauntlet'].filter(k => G.save.medals[w.id + '-' + k]).length;
+      const info = !ok ? 'Locked · ' + w.unlock + ' medals'
+        : intent === 'sky' ? (by.sky[w.id] || 0) + ' flying'
+        : intent === 'race' ? COURSES.filter(c => c.world === w.id).reduce((a, c) => a + (by.race[c.id] || 0), 0) + ' in rooms'
+        : medals + '/2 medals · ' + (G.save.shards[w.id] || []).length + '/20 shards';
       const b = document.createElement('button');
-      b.className = 'wcard' + (w.id === this.selWorld ? ' sel' : '') + (ok ? '' : ' locked');
-      b.style.background = 'linear-gradient(160deg,' + w.bgGrad[0] + ',' + w.bgGrad[1] + ')';
-      const got = (G.save.shards[w.id] || []).length;
-      b.innerHTML = (ok ? '' : '<span class="lk">' + w.unlock + ' medals</span>') + '<b>' + escapeHtml(w.name) + '</b><small>' + (ok ? got + '/20 shards' : 'Locked') + '</small>';
-      b.onclick = () => {
-        Sfx.click();
-        if (!ok) { this.toast(w.name + ' is locked', 'Earn ' + w.unlock + ' medals to open it. You have ' + medalCount() + '.', '#ff9d5c'); return; }
-        this.selWorld = w.id;
-        $('loading').hidden = false; $('loading-text').textContent = 'Flying to ' + w.name + '…';
-        setTimeout(() => { startAttract(w.id); $('loading').hidden = true; this.render_fly(); }, 30);
-      };
-      wrap.appendChild(b);
+      b.className = 'pin' + (w.id === this.selWorld ? ' sel' : '') + (ok ? '' : ' locked');
+      b.style.left = MAP_POS[i][0] / 10 + '%'; b.style.top = MAP_POS[i][1] / 6.2 + '%';
+      b.innerHTML = '<i>' + String(i + 1).padStart(2, '0') + '</i><span><b>' + escapeHtml(w.name) + '</b><small>' + info + '</small></span>';
+      b.onclick = () => { Sfx.click(); this.selWorld = w.id; this.render_fly(); };
+      pins.appendChild(b);
+    });
+    this.renderMapPanel(intent, by);
+  },
+  renderMapPanel(intent, by) {
+    const w = WORLD_BY_ID[this.selWorld], ok = worldUnlocked(w), panel = $('map-panel');
+    const opt = (title, sub, label, fn, off) => { const el = document.createElement('div'); el.className = 'opt'; el.innerHTML = '<span><b>' + title + '</b><small>' + sub + '</small></span><button class="btn small' + (intent === 'courses' ? '' : ' sky') + '"' + (off ? ' disabled' : '') + '>' + label + '</button>'; el.querySelector('button').onclick = () => { Sfx.click(); fn(); }; return el; };
+    panel.innerHTML = '<span class="label">' + String(WORLDS.indexOf(w) + 1).padStart(2, '0') + ' · ' + (G.save.shards[w.id] || []).length + ' / 20 Sky Shards</span><h3>' + escapeHtml(w.name) + '</h3><p class="muted" style="margin:0">' + escapeHtml(w.blurb) + '</p>';
+    if (!ok) { panel.insertAdjacentHTML('beforeend', '<div class="panel">Locked. Earn ' + w.unlock + ' medals to open it. You have ' + medalCount() + '.</div>'); return; }
+    if (intent === 'courses') {
+      for (const k of ['line', 'gauntlet']) {
+        const cdef = COURSE_BY_ID[w.id + '-' + k], got = G.save.medals[cdef.id];
+        panel.appendChild(opt(escapeHtml(cdef.name), COURSE_KINDS[k].diff + ' · best ' + fmtTime(G.save.best[cdef.id]) + (got ? ' · ' + MEDAL_NAMES[got] : ''), 'Fly', () => this.launch({ mode: 'course', courseId: cdef.id })));
+      }
+      panel.appendChild(opt('Score Attack', 'Two minutes · best ' + fmtNum(G.save.attack[w.id] || 0), 'Fly', () => this.launch({ mode: 'attack', worldId: w.id })));
+      panel.appendChild(opt('Explore', 'No timer · find the Sky Shards', 'Fly', () => this.launch({ mode: 'free', worldId: w.id })));
+    } else if (intent === 'sky') {
+      panel.appendChild(opt('Join Open Sky', Net.hasRoom ? 'Puts you on the first server with space' : 'Offline, so you fly alone', 'Fly', () => this.launch({ mode: 'sky', worldId: w.id })));
+      for (const s of Net.skyServers(w.id)) panel.appendChild(opt('Server ' + s.n, s.count + ' / ' + Net.SKY_CAP + ' pilots', s.full ? 'Full' : 'Join', () => this.launch({ mode: 'sky', worldId: w.id, server: s.n }), s.full));
+    } else {
+      for (const k of ['line', 'gauntlet']) {
+        const cdef = COURSE_BY_ID[w.id + '-' + k];
+        panel.appendChild(opt(escapeHtml(cdef.name), COURSE_KINDS[k].diff + ' · ' + (by.race[cdef.id] || 0) + ' in room', 'Join', () => this.launch({ mode: 'race', courseId: cdef.id }), !Net.hasRoom));
+      }
+      if (!Net.hasRoom) panel.insertAdjacentHTML('beforeend', '<p class="muted" style="margin:0">Races need live play. You are offline right now.</p>');
     }
-    const w = WORLD_BY_ID[this.selWorld];
-    if (G.worldId !== w.id) { setTimeout(() => { startAttract(w.id); this.render_fly(); }, 30); }
-    $('w-sub').textContent = w.kind === 'islands' ? 'Floating islands' : WORLDS.indexOf(w) + 1 + ' of 7';
-    $('w-name').textContent = w.name;
-    $('w-blurb').textContent = w.blurb;
-    $('w-shards').textContent = (G.save.shards[w.id] || []).length + ' / 20 Sky Shards';
-    const modes = $('modes');
-    modes.innerHTML = '';
-    for (const k of ['line', 'gauntlet']) {
-      const cdef = COURSE_BY_ID[w.id + '-' + k], K = COURSE_KINDS[k];
-      const course = G.worldId === w.id ? getCourse(cdef, G.world) : null;
-      const best = G.save.best[cdef.id], got = G.save.medals[cdef.id];
-      const m = course ? course.medals : null;
+  },
+
+  /* ---------- shop ---------- */
+  render_shop() {
+    const s = G.save, tab = this.shopTab || 'Paint';
+    $('shop-coins').innerHTML = '<i class="coin"></i><span class="num">' + fmtNum(s.coins || 0) + ' coins</span>';
+    const now = new Date(), mid = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1), left = mid - now;
+    $('shop-timer').textContent = 'New deals in ' + Math.floor(left / 3600000) + 'h ' + Math.floor(left / 60000) % 60 + 'm';
+    const card = d => {
+      const have = owns(d.kind, d.item), afford = (s.coins || 0) >= d.price;
       const el = document.createElement('div');
-      el.className = 'mode';
-      el.innerHTML = '<div class="row"><span class="tag ' + (k === 'line' ? 'easy' : 'hard') + '">' + K.diff + '</span><span class="tag">' + (course ? course.rings.length : K.rings) + ' rings</span></div>' +
-        '<h3>' + escapeHtml(cdef.name) + '</h3><p>' + K.desc + '</p>' +
-        '<div class="best">Best <span class="num">' + fmtTime(best) + '</span>' + (got ? ' · ' + MEDAL_NAMES[got] : '') + '</div>' +
-        (m ? '<div class="medals">' + ['plat', 'gold', 'silver', 'bronze'].map(x => '<span class="medal m-' + x + (got && MEDAL_RANK[got] >= MEDAL_RANK[x] ? ' got' : '') + '"><i></i>' + fmtTime(m[x]) + '</span>').join('') + '</div>' : '') +
-        '<div class="row"><button class="btn small">Fly</button></div>';
-      el.querySelector('button').onclick = () => { Sfx.click(); this.launch({ mode: 'course', courseId: cdef.id }); };
-      modes.appendChild(el);
-    }
-    const att = document.createElement('div');
-    att.className = 'mode';
-    att.innerHTML = '<div class="row"><span class="tag">2 minutes</span></div><h3>Score Attack</h3><p>Two minutes. Chain rings for a multiplier and add tricks for points.</p><div class="best">Best <span class="num">' + fmtNum(G.save.attack[w.id] || 0) + '</span></div><div class="row"><button class="btn small">Fly</button></div>';
-    att.querySelector('button').onclick = () => { Sfx.click(); this.launch({ mode: 'attack', worldId: w.id }); };
-    modes.appendChild(att);
-    const fr = document.createElement('div');
-    fr.className = 'mode';
-    fr.innerHTML = '<div class="row"><span class="tag">No timer</span></div><h3>Explore</h3><p>No timer. Find the 20 Sky Shards and practise tricks.</p><div class="best">' + (G.save.shards[w.id] || []).length + ' / 20 shards found</div><div class="row"><button class="btn small">Fly</button></div>';
-    fr.querySelector('button').onclick = () => { Sfx.click(); this.launch({ mode: 'free', worldId: w.id }); };
-    modes.appendChild(fr);
+      el.className = 'sitem' + (d.deal ? ' deal' : '') + (have ? ' owned' : '');
+      const full = d.deal ? itemPrice(d.kind, d.item) : 0;
+      el.innerHTML = swatchHtml(d.kind, d.item) + '<b>' + escapeHtml(d.name) + '</b><small>' + d.kind + (d.kind === 'Frame' ? ' · changes handling' : '') + '</small>' +
+        '<span class="price"><i class="coin"></i>' + fmtNum(d.price) + (full ? ' <s>' + fmtNum(full) + '</s>' : '') + '</span>' +
+        '<button class="btn small' + (have || !afford ? ' ghost' : '') + '"' + (have ? ' disabled' : '') + '>' + (have ? 'Owned' : afford ? 'Buy' : 'Need ' + fmtNum(d.price - (s.coins || 0)) + ' more') + '</button>';
+      el.querySelector('button').onclick = () => {
+        if (!afford) { Sfx.ui(); this.toast('Not enough coins', 'Fly rings, land tricks and finish runs to earn more.', '#ff9d5c'); return; }
+        if (buyItem(d)) { Sfx.gold(); this.toast('Bought ' + d.name, 'Equip it in the Locker.', '#ffd36b'); if (Net.hasDb) Net.postProfile(); this.render_shop(); this.updateCoins(); }
+      };
+      return el;
+    };
+    const deals = $('shop-deals'); deals.innerHTML = '';
+    shopDeals().forEach(d => deals.appendChild(card(d)));
+    $('shop-tabs').innerHTML = [['Paint', 'Paints'], ['Trail', 'Trails'], ['Frame', 'Frames']].map(([k, n]) => '<button class="tab' + (tab === k ? ' on' : '') + '" data-t="' + k + '">' + n + '</button>').join('');
+    $('shop-tabs').querySelectorAll('button').forEach(b => (b.onclick = () => { this.shopTab = b.dataset.t; Sfx.ui(); this.render_shop(); }));
+    const items = $('shop-items'); items.innerHTML = '';
+    shopCatalog().filter(d => d.kind === tab).sort((a, b) => a.price - b.price).forEach(d => items.appendChild(card(d)));
   },
 
   launch(opts) {
@@ -257,8 +401,9 @@ const UI = {
     const box = $('locker-items'); box.innerHTML = '';
     const list = this.lockerTab === 'frames' ? FRAMES : this.lockerTab === 'paints' ? PAINTS : TRAILS;
     const cur = this.lockerTab === 'frames' ? G.save.frame : this.lockerTab === 'paints' ? G.save.paint : G.save.trail;
+    const kind = this.lockerTab === 'frames' ? 'Frame' : this.lockerTab === 'paints' ? 'Paint' : 'Trail';
     for (const it of list) {
-      const ok = unlockMet(it.unlock);
+      const ok = owns(kind, it);
       const b = document.createElement('button');
       b.className = 'item' + (it.id === cur ? ' on' : '') + (ok ? '' : ' locked');
       let sw = '';
@@ -266,7 +411,7 @@ const UI = {
       if (this.lockerTab === 'trails') { const cs = it.colors || [PAINT_BY_ID[G.save.paint].a, PAINT_BY_ID[G.save.paint].b]; sw = '<div class="swatch" style="background:linear-gradient(90deg,' + cs.join(',') + (cs.length === 1 ? ',transparent' : '') + ')"></div>'; }
       let stats = '';
       if (this.lockerTab === 'frames') stats = '<small>' + escapeHtml(it.desc) + '</small><small>Roll ' + it.roll.toFixed(1) + ' · Pitch ' + it.pitch.toFixed(1) + ' · Glide ' + (1 / it.drag).toFixed(2) + '</small>';
-      b.innerHTML = sw + '<b>' + escapeHtml(it.name) + '</b>' + stats + '<small>' + (ok ? (it.id === cur ? 'Equipped' : 'Tap to equip') : 'Locked · ' + escapeHtml(unlockText(it.unlock))) + '</small>';
+      b.innerHTML = sw + '<b>' + escapeHtml(it.name) + '</b>' + stats + '<small>' + (ok ? (it.id === cur ? 'Equipped' : 'Tap to equip') : 'Locked · ' + escapeHtml(unlockText(it.unlock)) + ' or ' + fmtNum(itemPrice(kind, it)) + ' coins in the Shop') + '</small>';
       b.onclick = () => {
         if (!ok) { Sfx.ui(); this.toast('Locked', unlockText(it.unlock), '#ff9d5c'); return; }
         Sfx.click();
@@ -305,12 +450,28 @@ const UI = {
 
   /* ---------- boards ---------- */
   render_boards() {
-    if (!this.boardTab) this.boardTab = (G.save.lastWorld || 'harbor') + '-line';
-    const dk = 'daily-' + todayKey();
-    const tabs = [[dk, 'Daily']].concat(COURSES.map(c => [c.id, c.name])).concat(WORLDS.map(w => ['attack:' + w.id, w.short + ' Score']));
-    $('board-tabs').innerHTML = tabs.map(([k, n]) => '<button class="tab' + (this.boardTab === k ? ' on' : '') + '" data-t="' + k + '">' + escapeHtml(n) + '</button>').join('');
-    $('board-tabs').querySelectorAll('button').forEach(b => (b.onclick = () => { this.boardTab = b.dataset.t; Sfx.ui(); this.render_boards(); }));
-    this.renderBoard();
+    // every board is a card with a real in-game picture; tapping one opens its details and closes the one before
+    const dd = dailyCourseDef(todayKey());
+    const list = [['daily-' + todayKey(), 'Daily · ' + WORLD_BY_ID[dd.world].short, 'world-' + dd.world]];
+    for (const w of WORLDS) {
+      for (const c of COURSES.filter(c => c.world === w.id)) list.push([c.id, c.name, c.id]);
+      list.push(['attack:' + w.id, w.short + ' Score Attack', 'world-' + w.id]);
+    }
+    const grid = $('board-grid'); grid.innerHTML = '';
+    for (const [k, name, img] of list) {
+      const open = this.boardTab === k;
+      const el = document.createElement('div');
+      el.className = 'bcard' + (open ? ' open' : '');
+      el.innerHTML = '<button class="bhead" aria-expanded="' + open + '"><img src="thumbs/' + img + '.jpg" alt="" loading="lazy"><b>' + escapeHtml(name) + '</b></button>' + (open ? '<div class="bdetail" id="board-body"></div>' : '');
+      el.querySelector('.bhead').onclick = () => {
+        Sfx.ui();
+        this.boardTab = open ? null : k;
+        this.render_boards();
+        if (this.boardTab) document.querySelector('.bcard.open').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      };
+      grid.appendChild(el);
+    }
+    if (this.boardTab) this.renderBoard();
   },
   renderBoard() {
     const body = $('board-body');
@@ -397,7 +558,7 @@ const UI = {
       '<span><kbd>R</kbd></span><span>Back to the last ring</span>' +
       '<span><kbd>P</kbd></span><span>Photo mode</span>' +
       '<span><kbd>Esc</kbd></span><span>Pause</span></div></div>' +
-      '<div><div class="label" style="margin-bottom:8px">Touch</div><p class="muted" style="margin:0 0 8px">Drag anywhere on the left half to steer: sideways turns, up dives, down climbs. Hold BOOST and BRAKE on the right. CAM changes camera, BACK returns to the last ring.</p>' +
+      '<div><div class="label" style="margin-bottom:8px">Touch</div><p class="muted" style="margin:0 0 8px">Use the arrow buttons at the bottom left: left and right turn, up dives, down climbs. Hold BOOST and BRAKE on the right. CAM changes camera, BACK returns to the last ring.</p>' +
       '<div class="label" style="margin:14px 0 8px">Gamepad</div><p class="muted" style="margin:0">Left stick steers. Right trigger or A boosts, left trigger brakes. Bumpers or right stick for barrel rolls. Y camera, B back to ring, X photo, Start pause.</p></div>' +
       '<div><div class="label" style="margin-bottom:8px">How gliding works</div><p class="muted" style="margin:0 0 8px">You have no engine. Diving turns height into speed; climbing spends it. Too slow and the wing stalls and drops its nose. Thermals (rising sparkles) and cyan lift rings give height back. Boost refills from rings and thermals.</p>' +
       '<div class="label" style="margin:14px 0 8px">Style</div><p class="muted" style="margin:0">Barrel rolls, loops, inverted flight, skimming the ground or waves, near misses, gates and power dives all score. Rings chain into a multiplier.</p></div>' +
@@ -488,7 +649,7 @@ const UI = {
     const R = run.results;
     if (!R) return;
     const card = $('results-card');
-    const xpLine = '<div class="muted">+' + fmtNum(R.xp) + ' XP' + (R.levelUps ? ' · level ' + G.save.level + '!' : '') + '</div>';
+    const xpLine = '<div class="muted">+' + fmtNum(R.xp) + ' XP · +' + fmtNum(run.coinsEarned || 0) + ' coins' + (R.levelUps ? ' · level ' + G.save.level + '!' : '') + '</div>';
     const st = run.stats;
     const stats = '<div class="statgrid">' + [[st.rings, 'Rings'], [st.rolls, 'Rolls'], [st.loops, 'Loops'], [(st.skim + st.wave).toFixed(1) + 's', 'Skim'], [st.needles, 'Near misses'], [Math.round(st.maxSpeed * (G.settings.units === 'kmh' ? 3.6 : 1)), 'Top ' + (G.settings.units === 'kmh' ? 'km/h' : 'm/s')], [st.crashes, 'Crashes'], [st.km.toFixed(2) + ' km', 'Distance']].map(([v, l]) => '<div class="stat"><b class="num">' + v + '</b><span>' + l + '</span></div>').join('') + '</div>';
     let html = '', btns = [];
@@ -604,9 +765,6 @@ const UI = {
     if (this.hudCache.warn !== warn) { this.hudCache.warn = warn; $('warn').hidden = !warn; $('warn').textContent = warn; }
     this.updateMarker(run, p);
     this.drawMinimap(run, p);
-    const sv = $('stickvis');
-    if (Input.stick.id !== null) { sv.hidden = false; sv.style.left = Input.stick.ox + 'px'; sv.style.top = Input.stick.oy + 'px'; sv.firstChild.style.transform = 'translate(' + clamp(Input.stick.x - Input.stick.ox, -60, 60) + 'px,' + clamp(Input.stick.y - Input.stick.oy, -60, 60) + 'px)'; }
-    else sv.hidden = true;
   },
   updateMarker(run, p) {
     const el = $('marker');
