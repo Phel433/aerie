@@ -16,6 +16,22 @@ window.addEventListener('load', () => {
       else { startRun({ mode: 'course', courseId: k }); await wait(1500); }
       return;
     }
+    // link preview card (og.jpg, 1200x630): a real flight frame plus the game name
+    if (shot === 'og') {
+      const css = document.createElement('style');
+      css.textContent = `#hud,#topbar,#toasts,.screen,#loading,.overlay{display:none!important}
+        #gl{transform:scale(1.4);transform-origin:4% 50%}
+        #og{position:fixed;inset:0;z-index:9;pointer-events:none;background:linear-gradient(90deg,rgba(8,12,30,.78) 0%,rgba(8,12,30,.45) 38%,rgba(8,12,30,0) 62%);display:flex;flex-direction:column;justify-content:center;padding:0 72px;color:#fff1d6}
+        #og b{font:900 168px/0.85 var(--display);letter-spacing:.02em;text-transform:uppercase}
+        #og b i{font-style:normal;color:var(--apricot)}
+        #og p{font:800 30px/1.3 var(--body,Manrope),sans-serif;margin:22px 0 0;max-width:520px;color:#dfe7f7}
+        #og span{margin-top:28px;align-self:flex-start;font:800 22px/1 Manrope,sans-serif;letter-spacing:.14em;text-transform:uppercase;padding:12px 20px;border-radius:12px;background:var(--apricot);color:#2a1406}`;
+      document.head.appendChild(css);
+      document.body.insertAdjacentHTML('beforeend', '<div id="og"><b>Flung<i>8</i></b><p>Glide past floating islands, canyons and storms.</p><span>Free · plays in your browser</span></div>');
+      startRun({ mode: 'free', worldId: 'harbor' });
+      await wait(3500); G.state = 'pause';
+      return;
+    }
     if (shot === 'sheet') UI.go('fly');
     if (shot === 'flight' || shot === 'results') { startRun({ mode: 'course', courseId: 'harbor-line' }); await wait(5000); }
     if (shot === 'results') { G.run.next = G.run.rings.length; finishCourse(); }

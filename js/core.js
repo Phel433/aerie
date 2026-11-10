@@ -116,5 +116,6 @@ const G = {
   settings: null,
   save: null,
   W: 1, H: 1,
+  shake: 0,            // must start as a number: the camera adds it to its position above 270 km/h
   quality: 'med'
 };
