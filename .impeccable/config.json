@@ -7,7 +7,8 @@
         "rule": "cramped-padding",
         "value": "*",
         "files": [
-          "index.html"
+          "index.html",
+          "style.css"
         ],
         "createdAt": "2026-11-10T08:36:50.209Z",
         "reason": "false positive: .launch is a segmented bar; its mode buttons and FLY button carry their own 16-30px padding, so no text touches the bar edge (checked in 1440x900, tablet and phone screenshots)"
