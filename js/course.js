@@ -55,7 +55,8 @@ function generateCourse(W, cdef) {
   };
   let heading = rnd() * TAU, backtracks = 0;
   let bestRings = [];
-  while (rings.length < K.rings && backtracks < 320) {
+  if (cdef.from) { start = cdef.from.pos.clone(); heading = cdef.from.h; }
+  while (rings.length < (cdef.rings || K.rings) && backtracks < 320) {
     if (rings.length > bestRings.length) bestRings = rings.slice();
     const last = rings[rings.length - 1];
     const placed = tryPlace(last ? last.pos : start, last ? last.h : heading, !last);
@@ -71,6 +72,7 @@ function generateCourse(W, cdef) {
     }
   }
   if (rings.length < bestRings.length) { rings.length = 0; rings.push(...bestRings); }
+  if (!rings.length) return null;
   rings.forEach((r, i) => (r.idx = i));
   // a few boost rings on long straights
   rings.forEach((r, i) => { if (r.type === 'normal' && i > 1 && i < rings.length - 2 && i % 6 === 3) r.type = 'boost'; });

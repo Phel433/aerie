@@ -14,9 +14,11 @@ const UI = {
   hudCache: {}, feedN: 0, resetArm: false,
 
   init() {
+    this.applyAccent();
     document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { Sfx.init(); Sfx.click(); this.go(b.dataset.go); }));
     document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => { Sfx.click(); this.back(); }));
     $('cs-save').addEventListener('click', () => this.saveCallsign($('cs-input').value));
+    $('scr-fly').addEventListener('scroll', () => this.layoutStage()); // phone: keep the glider centred in the box while the page scrolls
     $('cs-input').addEventListener('keydown', e => { if (e.key === 'Enter') this.saveCallsign($('cs-input').value); });
     $('photo-hint').addEventListener('click', () => { if (G.state === 'photo') exitPhoto(); });
     // top bar, drawer, music player
@@ -86,9 +88,11 @@ const UI = {
   },
   open(name) {
     $('hud').hidden = true; $('ov-pause').hidden = true; $('ov-results').hidden = true;
-    const wasParked = G.state === 'title' || G.state === 'locker', toParked = name === 'title' || name === 'locker';
+    const wasParked = G.state === 'title' || G.state === 'locker', toParked = name === 'title' || name === 'locker' || name === 'shop';
     if (wasParked && !toParked) startAttract(G.worldId);
-    G.state = name === 'title' ? 'title' : name === 'locker' ? 'locker' : 'menu';
+    if (G.preview && name !== 'shop') { G.preview = null; this.shopSel = null; rebuildPlayerMesh(); } // drop the shop try-on
+    $('ov-buy').hidden = true;
+    G.state = name === 'title' ? 'title' : toParked ? 'locker' : 'menu';
     this.showOnly(name);
     const r = this['render_' + name];
     if (r) r.call(this);
@@ -104,12 +108,25 @@ const UI = {
       // glider sits in the open sky between the chips row and the launch bar
       const top = $('base-chips').getBoundingClientRect().bottom, bottom = $('launch').getBoundingClientRect().top;
       if (bottom > top) gy = top + (bottom - top) * 0.42;
-    } else if (this.screen === 'locker' && W > 760) {
-      const right = document.querySelector('#scr-locker .wrap').getBoundingClientRect().right; gx = right + (W - right) / 2;
+    } else if (this.screen === 'fly') {
+      const r = $('map-pic').getBoundingClientRect(); gx = r.left + r.width / 2; gy = r.top + r.height / 2;
+    } else if ((this.screen === 'locker' || this.screen === 'shop') && W > 760) {
+      const right = document.querySelector('#scr-' + this.screen + ' .wrap').getBoundingClientRect().right; gx = right + (W - right) / 2;
     }
     G.viewShift = { x: gx - W / 2, y: gy - H / 2 };
     const st = $('scr-title').style;
     st.setProperty('--gx', gx + 'px'); st.setProperty('--gy', (gy + Math.min(W, H) * (W > 760 ? 0.2 : 0.17)) + 'px');
+  },
+  /* buttons and highlights take the color of the equipped paint, kept bright enough to read on the dark panels */
+  applyAccent() {
+    const p = PAINT_BY_ID[G.save && G.save.paint] || PAINTS[0], hsl = {};
+    const pick = [p.a, p.b].map(h => new THREE.Color(h)).sort((x, y) => { x.getHSL(hsl); const sx = hsl.s * (1 - Math.abs(hsl.l - 0.6)); y.getHSL(hsl); return hsl.s * (1 - Math.abs(hsl.l - 0.6)) - sx; })[0];
+    pick.getHSL(hsl); pick.setHSL(hsl.h, hsl.s, clamp(hsl.l, 0.5, 0.82));
+    // text colour: whichever of dark or white has the higher WCAG contrast on this button colour
+    const lin = v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+    const L = 0.2126 * lin(pick.r) + 0.7152 * lin(pick.g) + 0.0722 * lin(pick.b), Ldark = 0.0068; // #1d1206
+    document.documentElement.style.setProperty('--apricot', '#' + pick.getHexString());
+    document.documentElement.style.setProperty('--on-apricot', (L + 0.05) / (Ldark + 0.05) >= 1.05 / (L + 0.05) ? '#1d1206' : '#ffffff');
   },
   updateCoins() { $('coin-count').textContent = fmtNum(G.save ? G.save.coins || 0 : 0); },
   back() {
@@ -131,6 +148,7 @@ const UI = {
     // on the pause menu Esc only resumes (main.js), so it must not also walk back to a menu screen
     if (I.back && G.state !== 'play' && (G.state !== 'pause' || this.fromPause)) {
       if (!$('ov-results').hidden) return;
+      if (!$('ov-buy').hidden) { $('ov-buy').hidden = true; return; }
       if (!$('drawer').hidden || !$('music-pop').hidden) { this.toggleDrawer(false); $('music-pop').hidden = true; return; }
       if (this.screen && this.screen !== 'title') { this.back(); return; }
       if (this.screen === 'title') { this.toggleDrawer(true); return; }
@@ -271,7 +289,7 @@ const UI = {
   renderMapPanel(intent, by) {
     const w = WORLD_BY_ID[this.selWorld], ok = worldUnlocked(w), panel = $('map-panel');
     const opt = (title, sub, label, fn, off) => { const el = document.createElement('div'); el.className = 'opt'; el.innerHTML = '<span><b>' + title + '</b><small>' + sub + '</small></span><button class="btn small' + (intent === 'courses' ? '' : ' sky') + '"' + (off ? ' disabled' : '') + '>' + label + '</button>'; el.querySelector('button').onclick = () => { Sfx.click(); fn(); }; return el; };
-    $('map-img').src = 'thumbs/world-' + w.id + '.jpg';
+    if (G.worldId !== w.id || !G.attract) startAttract(w.id); // the box is a window onto the live game flying through this world
     $('map-pic').classList.toggle('locked', !ok);
     $('map-cap').innerHTML = '<span class="label">' + String(WORLDS.indexOf(w) + 1).padStart(2, '0') + ' · ' + (G.save.shards[w.id] || []).length + ' / 20 Sky Shards</span><h3>' + escapeHtml(w.name) + '</h3><p>' + escapeHtml(w.blurb) + '</p>';
     panel.innerHTML = '';
@@ -297,30 +315,63 @@ const UI = {
 
   /* ---------- shop ---------- */
   render_shop() {
-    const s = G.save, tab = this.shopTab || 'Paint';
-    $('shop-coins').innerHTML = '<i class="coin"></i><span class="num">' + fmtNum(s.coins || 0) + ' coins</span>';
-    const now = new Date(), mid = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1), left = mid - now;
-    $('shop-timer').textContent = 'New deals in ' + Math.floor(left / 3600000) + 'h ' + Math.floor(left / 60000) % 60 + 'm';
-    const card = d => {
-      const have = owns(d.kind, d.item), afford = (s.coins || 0) >= d.price;
-      const el = document.createElement('div');
-      el.className = 'sitem' + (d.deal ? ' deal' : '') + (have ? ' owned' : '');
-      const full = d.deal ? itemPrice(d.kind, d.item) : 0;
-      el.innerHTML = swatchHtml(d.kind, d.item) + '<b>' + escapeHtml(d.name) + '</b><small>' + d.kind + (d.kind === 'Frame' ? ' · changes handling' : '') + '</small>' +
-        '<span class="price"><i class="coin"></i>' + fmtNum(d.price) + (full ? ' <s>' + fmtNum(full) + '</s>' : '') + '</span>' +
-        '<button class="btn small' + (have || !afford ? ' ghost' : '') + '"' + (have ? ' disabled' : '') + '>' + (have ? 'Owned' : afford ? 'Buy' : 'Need ' + fmtNum(d.price - (s.coins || 0)) + ' more') + '</button>';
-      el.querySelector('button').onclick = () => {
-        if (!afford) { Sfx.ui(); this.toast('Not enough coins', 'Fly rings, land tricks and finish runs to earn more.', '#ff9d5c'); return; }
-        if (buyItem(d)) { Sfx.gold(); this.toast('Bought ' + d.name, 'Equip it in the Locker.', '#ffd36b'); if (Net.hasDb) Net.postProfile(); this.render_shop(); this.updateCoins(); }
-      };
-      return el;
-    };
-    const deals = $('shop-deals'); deals.innerHTML = '';
-    shopDeals().forEach(d => deals.appendChild(card(d)));
-    $('shop-tabs').innerHTML = [['Paint', 'Paints'], ['Trail', 'Trails'], ['Frame', 'Frames']].map(([k, n]) => '<button class="tab' + (tab === k ? ' on' : '') + '" data-t="' + k + '">' + n + '</button>').join('');
+    const s = G.save, tab = this.shopTab || 'Deal', coins = s.coins || 0;
+    $('shop-coins').innerHTML = '<i class="coin"></i><span class="num">' + fmtNum(coins) + ' coins</span>';
+    $('shop-tabs').innerHTML = [['Deal', 'Deals'], ['Paint', 'Paints'], ['Trail', 'Trails'], ['Frame', 'Frames']].map(([k, n]) => '<button class="tab' + (tab === k ? ' on' : '') + '" data-t="' + k + '">' + n + '</button>').join('');
     $('shop-tabs').querySelectorAll('button').forEach(b => (b.onclick = () => { this.shopTab = b.dataset.t; Sfx.ui(); this.render_shop(); }));
-    const items = $('shop-items'); items.innerHTML = '';
-    shopCatalog().filter(d => d.kind === tab).sort((a, b) => a.price - b.price).forEach(d => items.appendChild(card(d)));
+    const now = new Date(), left = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
+    $('shop-timer').hidden = tab !== 'Deal';
+    $('shop-timer').textContent = '30% off today · new deals in ' + Math.floor(left / 3600000) + 'h ' + Math.floor(left / 60000) % 60 + 'm';
+    const list = tab === 'Deal' ? shopDeals() : shopCatalog().filter(d => d.kind === tab).sort((a, b) => a.price - b.price);
+    const key = d => d.kind + ':' + d.id, sel = this.shopSel;
+    const grid = $('shop-items'); grid.innerHTML = '';
+    for (const d of list) {
+      const have = owns(d.kind, d.item), full = d.deal ? itemPrice(d.kind, d.item) : 0;
+      const el = document.createElement('button');
+      el.className = 'sitem' + (sel && key(sel) === key(d) ? ' sel' : '') + (have ? ' owned' : '');
+      el.innerHTML = swatchHtml(d.kind, d.item) + '<span class="sname">' + escapeHtml(d.name) + '</span>' +
+        (have ? '<span class="have">Owned</span>' : '<span class="price"><i class="coin"></i>' + fmtNum(d.price) + (full ? ' <s>' + fmtNum(full) + '</s>' : '') + '</span>');
+      el.onclick = () => { Sfx.ui(); this.shopSel = d; G.preview = { [d.kind]: d.id }; rebuildPlayerMesh(); this.render_shop(); };
+      grid.appendChild(el);
+    }
+    this.renderShopSel();
+  },
+  renderShopSel() {
+    const d = this.shopSel, box = $('shop-sel'), coins = G.save.coins || 0;
+    box.hidden = !d;
+    if (!d) return;
+    const have = owns(d.kind, d.item), on = G.save[d.kind.toLowerCase()] === d.id;
+    const label = have ? (on ? 'Equipped' : 'Equip') : coins >= d.price ? 'Buy' : 'Need ' + fmtNum(d.price - coins) + ' more';
+    box.innerHTML = swatchHtml(d.kind, d.item) + '<span class="info"><b>' + escapeHtml(d.name) + '</b><small>' + d.kind + (d.kind === 'Frame' ? ' · ' + escapeHtml(d.item.desc) : '') + (have ? '' : ' · ' + fmtNum(d.price) + ' coins') + '</small></span>' +
+      '<button class="btn small' + ((have && on) || (!have && coins < d.price) ? ' ghost' : '') + '"' + (have && on ? ' disabled' : '') + '>' + label + '</button>';
+    box.querySelector('button').onclick = () => {
+      if (have) { Sfx.click(); this.equipItem(d); return; }
+      if (coins < d.price) { Sfx.ui(); this.toast('Not enough coins', 'Fly rings, land tricks and finish runs to earn more.', '#ff9d5c'); return; }
+      Sfx.click(); this.confirmBuy(d);
+    };
+  },
+  // ask before spending, so a stray tap never burns coins
+  confirmBuy(d) {
+    const coins = G.save.coins || 0;
+    $('buy-card').innerHTML = '<h2 id="buy-title">Buy ' + escapeHtml(d.name) + '?</h2><p class="muted" style="margin:0">' + fmtNum(d.price) + ' coins. You will have ' + fmtNum(coins - d.price) + ' left.' + (d.kind === 'Frame' ? ' This frame changes how your glider handles.' : '') + '</p>' +
+      '<div class="row"><button class="btn" id="buy-yes">Buy for ' + fmtNum(d.price) + '</button><button class="btn ghost" id="buy-no">Cancel</button></div>';
+    $('ov-buy').hidden = false;
+    $('buy-no').onclick = () => { Sfx.ui(); $('ov-buy').hidden = true; };
+    $('buy-yes').onclick = () => {
+      $('ov-buy').hidden = true;
+      if (!buyItem(d)) return;
+      Sfx.gold(); this.equipItem(d, true);
+      this.toast('Bought ' + d.name, 'It is on your glider now.', '#ffd36b');
+      if (Net.hasDb) Net.postProfile();
+      this.updateCoins();
+    };
+    if (Input.mode !== 'touch') $('buy-yes').focus();
+  },
+  equipItem(d, quiet) {
+    G.save[d.kind.toLowerCase()] = d.id; saveProgress();
+    G.preview = null; rebuildPlayerMesh(); this.applyAccent();
+    if (!quiet && Net.hasDb) Net.postProfile();
+    this.render_shop();
   },
 
   launch(opts) {
@@ -408,7 +459,7 @@ const UI = {
         if (!ok) { Sfx.ui(); this.toast('Locked', unlockText(it.unlock), '#ff9d5c'); return; }
         Sfx.click();
         if (this.lockerTab === 'frames') G.save.frame = it.id; else if (this.lockerTab === 'paints') G.save.paint = it.id; else G.save.trail = it.id;
-        saveProgress(); rebuildPlayerMesh(); this.render_locker();
+        saveProgress(); rebuildPlayerMesh(); this.applyAccent(); this.render_locker();
         if (Net.hasDb) Net.postProfile();
       };
       box.appendChild(b);
@@ -469,20 +520,19 @@ const UI = {
     const body = $('board-body');
     if (!body) return;
     const t = this.boardTab;
-    let note = '';
-    if (!Net.hasDb) note = '<p class="muted">The shared board is not connected in this view. Your own best times are still saved on this device.</p>';
-    else if (Net.canPost === false) note = '<p class="muted">You can read the board, but your account can only view this page, so your times stay on this device.</p>';
+    const tag = d => '<span class="dtag ' + d.toLowerCase() + '">' + d + '</span>';
     if (t.startsWith('attack:')) {
       const wid = t.slice(7), rows = Net.attackRankings(wid).slice(0, 50);
-      body.innerHTML = '<div class="label">' + escapeHtml(WORLD_BY_ID[wid].name) + ' · Score Attack · your best ' + fmtNum(G.save.attack[wid] || 0) + '</div>' + note +
+      body.innerHTML = '<div class="row">' + tag('Medium') + '<div class="label">' + escapeHtml(WORLD_BY_ID[wid].name) + ' · Score Attack · your best ' + fmtNum(G.save.attack[wid] || 0) + '</div></div>' +
         (rows.length ? '<div class="tablewrap"><table><thead><tr><th>#</th><th>Pilot</th><th>Level</th><th style="text-align:right">Score</th></tr></thead><tbody>' + rows.map((r, i) => '<tr class="' + (r.me ? 'me' : '') + '"><td class="num">' + (i + 1) + '</td><td>' + escapeHtml(r.cs) + '</td><td class="num">' + r.lvl + '</td><td class="num" style="text-align:right">' + fmtNum(r.score) + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="muted">No scores yet. Be the first.</p>');
       return;
     }
     const cdef = courseDefById(t);
     const rows = Net.rankings(t).slice(0, 50);
-    body.innerHTML = '<div class="row" style="justify-content:space-between"><div class="label">' + escapeHtml(WORLD_BY_ID[cdef.world].name) + ' · ' + escapeHtml(cdef.name) + ' · your best ' + fmtTime(G.save.best[t]) + '</div><button class="btn small" id="board-fly">Fly this course</button></div>' + note +
+    body.innerHTML = '<div class="row" style="justify-content:space-between"><div class="row">' + tag(COURSE_KINDS[cdef.kind].diff) + '<div class="label">' + escapeHtml(WORLD_BY_ID[cdef.world].name) + ' · ' + escapeHtml(cdef.name) + ' · your best ' + fmtTime(G.save.best[t]) + ' · Endless best ' + fmtNum(G.save.endless[t] || 0) + ' rings</div></div><div class="row"><button class="btn small ghost" id="board-endless">Endless</button><button class="btn small" id="board-fly">Fly this course</button></div></div>' +
       (rows.length ? '<div class="tablewrap"><table><thead><tr><th>#</th><th>Pilot</th><th>Level</th><th style="text-align:right">Time</th><th></th></tr></thead><tbody>' + rows.map((r, i) => '<tr class="' + (r.me ? 'me' : '') + '"><td class="num">' + (i + 1) + '</td><td>' + escapeHtml(r.cs) + '</td><td class="num">' + r.lvl + '</td><td class="num" style="text-align:right">' + fmtTime(r.t) + '</td><td style="text-align:right"><button class="btn small ghost" data-ghost="' + escapeHtml(r.uid) + '" data-cs="' + escapeHtml(r.cs) + '">Race ghost</button></td></tr>').join('') + '</tbody></table></div>' : '<p class="muted">No times yet. Fly it and claim the top spot.</p>');
     $('board-fly').onclick = () => { Sfx.click(); this.launch({ mode: 'course', courseId: t }); };
+    $('board-endless').onclick = () => { Sfx.click(); this.launch({ mode: 'endless', courseId: t }); };
     body.querySelectorAll('[data-ghost]').forEach(b => (b.onclick = async () => {
       Sfx.click();
       if (!worldUnlocked(WORLD_BY_ID[cdef.world])) { this.toast('World locked', 'Earn more medals to fly ' + WORLD_BY_ID[cdef.world].name + '.', '#ff9d5c'); return; }
@@ -543,7 +593,7 @@ const UI = {
       '<span><kbd>W</kbd> <kbd>S</kbd></span><span>Dive / climb (swap in Settings)</span>' +
       '<span><kbd>A</kbd> <kbd>D</kbd></span><span>Turn left / right</span>' +
       '<span><kbd>T</kbd></span><span>Switch steering: steep bank, free roll, sharp turn</span>' +
-      '<span><kbd>Q</kbd> <kbd>E</kbd></span><span>Barrel roll left / right (hold)</span>' +
+      '<span><kbd>←</kbd> <kbd>→</kbd> or <kbd>Q</kbd> <kbd>E</kbd></span><span>Barrel roll left / right (hold)</span>' +
       '<span><kbd>Space</kbd></span><span>Boost (uses the boost bar)</span>' +
       '<span><kbd>Shift</kbd></span><span>Air brake, tighter turns</span>' +
       '<span><kbd>C</kbd></span><span>Change camera</span>' +
@@ -563,13 +613,13 @@ const UI = {
     this.showOnly('none');
     $('ov-pause').hidden = true; $('ov-results').hidden = true;
     $('hud').hidden = false;
-    const name = run.cdef ? run.cdef.name : run.mode === 'attack' ? 'Score Attack' : run.mode === 'sky' ? 'Open Sky' : 'Explore';
+    const name = run.mode === 'endless' ? 'Endless · ' + run.cdef.name : run.cdef ? run.cdef.name : run.mode === 'attack' ? 'Score Attack' : run.mode === 'sky' ? 'Open Sky' : 'Explore';
     $('h-mode').textContent = WORLD_BY_ID[G.worldId].short + ' · ' + name;
     $('h-score').hidden = !(run.mode === 'attack' || run.mode === 'free' || run.mode === 'sky');
     $('h-pilots').hidden = run.mode !== 'sky';
     $('standings').hidden = run.mode !== 'race';
-    $('h-target').textContent = '';
-    if (run.medals) {
+    $('h-target').textContent = run.mode === 'endless' ? 'Best ' + (G.save.endless[run.cdef.id] || 0) + ' rings' : '';
+    if (run.medals && run.mode !== 'endless') {
       const best = G.save.best[run.cdef.id], got = G.save.medals[run.cdef.id];
       const next = ['bronze', 'silver', 'gold', 'plat'].find(m => !got || MEDAL_RANK[m] > MEDAL_RANK[got]);
       $('h-target').textContent = next ? MEDAL_NAMES[next] + ' ' + fmtTime(run.medals[next]) : 'Best ' + fmtTime(best);
@@ -610,7 +660,7 @@ const UI = {
     const run = G.run;
     $('ov-pause').hidden = false;
     const btns = [['Resume', () => resumeGame()]];
-    if (run.mode === 'course' || run.mode === 'attack') btns.push(['Restart', () => { $('ov-pause').hidden = true; startRun({ mode: run.mode, courseId: run.cdef && run.cdef.id, worldId: G.worldId, ghost: run.boardGhost }); }]);
+    if (run.mode === 'course' || run.mode === 'attack' || run.mode === 'endless') btns.push(['Restart', () => { $('ov-pause').hidden = true; startRun({ mode: run.mode, courseId: run.cdef && run.cdef.id, worldId: G.worldId, ghost: run.boardGhost }); }]);
     btns.push(['Change camera (' + CAM_NAMES[G.camMode].replace(' camera', '') + ')', () => { cycleCamera(); this.pause(); }]);
     btns.push(['Settings', () => this.pauseSettings()]);
     btns.push(['Sound: ' + (G.settings.master > 0 ? 'On' : 'Off'), () => { G.settings.master = G.settings.master > 0 ? 0 : 0.8; saveSettings(); Sfx.setVolumes(G.settings.master, G.settings.music, G.settings.sfx); this.pause(); }]);
@@ -675,6 +725,10 @@ const UI = {
       if (other) btns.push(['Try ' + other.name, () => startRun({ mode: 'course', courseId: other.id })]);
       btns.push(['Board', () => { this.quitToMenu(); this.boardTab = run.cdef.id; this.go('boards'); }]);
       btns.push(['Menu', () => this.quitToMenu()]);
+    } else if (R.kind === 'endless') {
+      html = '<div class="label">' + escapeHtml(WORLD_BY_ID[run.cdef.world].name) + ' · Endless · ' + escapeHtml(run.cdef.name) + '</div><h2>' + (R.pb ? 'New best' : R.reason === 'crashed' ? 'Crashed' : 'Missed a ring') + '</h2>' +
+        '<div class="res-big num">' + fmtNum(R.rings) + ' rings</div><div class="muted">' + (R.prev ? 'Previous best ' + fmtNum(R.prev) + ' rings' : 'First Endless run on this course') + '</div>' + xpLine + stats;
+      btns = [['Again', () => startRun({ mode: 'endless', courseId: run.cdef.id })], ['Board', () => { this.quitToMenu(); this.boardTab = run.cdef.id; this.go('boards'); }], ['Menu', () => this.quitToMenu()]];
     } else if (R.kind === 'attack') {
       const rows = Net.attackRankings(G.worldId); const rank = rows.findIndex(r => r.me) + 1;
       html = '<div class="label">' + escapeHtml(WORLD_BY_ID[G.worldId].name) + ' · Score Attack</div><h2>' + (R.pb ? 'New best' : 'Time') + '</h2><div class="res-big num">' + fmtNum(R.score) + '</div><div class="muted">' + (R.prev ? 'Previous best ' + fmtNum(R.prev) : 'First score in this world') + (rank ? ' · #' + rank + ' on the board' : '') + '</div>' + xpLine + stats;
@@ -735,7 +789,8 @@ const UI = {
     if (run.mode === 'attack') set('h-time', fmtTime(Math.max(0, run.timeLimit - run.t)));
     else if (run.mode === 'free' || run.mode === 'sky') set('h-time', run.stats.km.toFixed(2) + ' km');
     else set('h-time', fmtTime(run.t));
-    if (run.rings.length && run.mode !== 'attack') set('h-rings', Math.min(run.next, run.rings.length) + ' / ' + run.rings.length);
+    if (run.mode === 'endless') set('h-rings', run.next + ' rings');
+    else if (run.rings.length && run.mode !== 'attack') set('h-rings', Math.min(run.next, run.rings.length) + ' / ' + run.rings.length);
     else if (run.mode === 'attack') set('h-rings', run.stats.rings + ' rings');
     else set('h-rings', (G.save.shards[G.worldId] || []).length + ' / 20 shards');
     set('h-combo', run.combo > 1 ? 'Combo x' + run.combo : '');

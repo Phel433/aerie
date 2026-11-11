@@ -69,10 +69,11 @@ const Input = (() => {
     // touch arrow buttons act exactly like the arrow keys
     if (k('KeyW') || k('ArrowUp') || held.up) pitch -= 1;
     if (k('KeyS') || k('ArrowDown') || held.down) pitch += 1;
-    if (k('KeyA') || k('ArrowLeft') || held.left) roll -= 1;
-    if (k('KeyD') || k('ArrowRight') || held.right) roll += 1;
-    if (k('KeyQ')) yaw += 1;
-    if (k('KeyE')) yaw -= 1;
+    if (k('KeyA') || held.left) roll -= 1;
+    if (k('KeyD') || held.right) roll += 1;
+    // barrel rolls: left/right arrows sit under the right hand while WASD flies, Q/E still work
+    if (k('KeyQ') || k('ArrowLeft')) yaw += 1;
+    if (k('KeyE') || k('ArrowRight')) yaw -= 1;
     pitch *= invert;
     let boost = k('Space') || held.boost, brake = k('ShiftLeft') || k('ShiftRight') || held.brake;
     if (mode === 'kb' && st.mouse && mouse.seen && G.state === 'play') {

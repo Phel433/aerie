@@ -6,7 +6,7 @@ const DEFAULT_SETTINGS = { master: 0.8, music: 0.5, sfx: 0.8, musicStyle: 'calm'
 function newSave() {
   return {
     v: 1, callsign: '', frame: 'falcon', paint: 'dawn', trail: 'mist',
-    xp: 0, level: 1, best: {}, medals: {}, attack: {}, shards: {}, ach: {}, coins: 0, owned: {},
+    xp: 0, level: 1, best: {}, medals: {}, attack: {}, endless: {}, shards: {}, ach: {}, coins: 0, owned: {},
     stats: { km: 0, rings: 0, rolls: 0, loops: 0, thermal: 0, crashes: 0, flights: 0, maxSpeed: 0, races: 0, raceWins: 0, dailyDays: [], challenges: 0, time: 0 },
     daily: { key: '', prog: {}, done: [] }, lastWorld: 'harbor', seenHelp: false
   };
@@ -68,7 +68,7 @@ function checkNewUnlocks(announce = true) {
     for (const k of now) if (!knownUnlocks.has(k)) {
       const [kind, id] = k.split(':');
       const name = kind === 'World' ? WORLD_BY_ID[id].name : (allItems().find(i => i.kind === kind && i.id === id) || {}).name;
-      UI.toast('Unlocked: ' + name, kind === 'World' ? 'A new world is open in Fly.' : 'New ' + kind.toLowerCase() + ' in the Locker.', '#ffcf5a');
+      UI.toast('Unlocked: ' + name, kind === 'World' ? 'A new world is open in Fly.' : 'New ' + kind.toLowerCase() + ' in Skin.', '#ffcf5a');
     }
   }
   knownUnlocks = now;

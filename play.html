@@ -65,9 +65,9 @@
     <b class="brand">Flung8</b>
     <div class="tb-tabs">
       <button class="tb-tab" data-tab="title">Fly</button>
-      <button class="tb-tab" data-tab="locker">Locker</button>
+      <button class="tb-tab" data-tab="locker">Skin</button>
       <button class="tb-tab" data-tab="shop">Shop</button>
-      <button class="tb-tab" data-tab="boards">Boards</button>
+      <button class="tb-tab" data-tab="boards">Board</button>
     </div>
     <div class="tb-right">
       <button class="tb-btn" data-tab="shop" aria-label="Your coins, open the shop"><i class="coin" aria-hidden="true"></i><b id="coin-count" class="num">0</b></button>
@@ -119,19 +119,19 @@
     <div class="map-body">
       <div class="map-list" id="map-pins" role="listbox" aria-label="Worlds"></div>
       <div class="map-stage">
-        <div class="map-pic" id="map-pic"><img id="map-img" src="thumbs/world-harbor.jpg" alt=""><div class="cap" id="map-cap"></div></div>
+        <div class="map-pic" id="map-pic" aria-label="Live view of the world"><div class="cap" id="map-cap"></div></div>
         <div class="map-panel" id="map-panel"></div>
       </div>
     </div>
   </section>
 
-  <section class="screen dim" id="scr-shop" hidden><div class="wrap">
+  <section class="screen" id="scr-shop" hidden><div class="wrap shop-wrap">
     <div class="head"><button class="back" data-back>Back</button><h2>Shop</h2><span class="pill" id="shop-coins"></span></div>
-    <div class="row" style="justify-content:space-between"><div class="label">Today's deals · 30% off</div><div class="label" id="shop-timer"></div></div>
-    <div class="shop-grid" id="shop-deals"></div>
     <div class="tabs" id="shop-tabs"></div>
+    <div class="label" id="shop-timer"></div>
     <div class="shop-grid" id="shop-items"></div>
-    <p class="muted" style="margin:0;font-size:13px">Earn coins from rings, tricks, finished runs, daily challenges and level-ups. What you buy shows up in the Locker.</p>
+    <p class="muted" style="margin:0;font-size:13px">Tap an item to try it on your glider. Earn coins from rings, tricks, finished runs, daily challenges and level-ups.</p>
+    <div class="shop-sel" id="shop-sel"></div>
   </div></section>
 
   <section class="screen dim" id="scr-live" hidden><div class="wrap">
@@ -146,7 +146,7 @@
   </div></section>
 
   <section class="screen" id="scr-locker" hidden><div class="wrap" style="max-width:560px;margin-left:0">
-    <div class="head"><button class="back" data-back>Done</button><h2>Locker</h2></div>
+    <div class="head"><button class="back" data-back>Done</button><h2>Skin</h2></div>
     <div class="tabs" id="locker-tabs"></div>
     <div class="panel"><div class="items" id="locker-items"></div></div>
     <p class="muted" style="margin:0;font-size:13px">Frames change how the glider handles. Paints and trails are for looks.</p>
@@ -158,7 +158,7 @@
   </div></section>
 
   <section class="screen dim" id="scr-boards" hidden><div class="wrap">
-    <div class="head"><button class="back" data-back>Back</button><h2>Boards</h2></div>
+    <div class="head"><button class="back" data-back>Back</button><h2>Board</h2></div>
     <div class="bgrid" id="board-grid"></div>
   </div></section>
 
@@ -176,6 +176,8 @@
     <h2>Paused</h2>
     <div class="grid" id="pause-btns"></div>
   </div></div>
+
+  <div class="overlay" id="ov-buy" hidden><div class="card" id="buy-card" role="dialog" aria-modal="true" aria-labelledby="buy-title"></div></div>
 
   <div class="overlay" id="ov-results" hidden><div class="card" id="results-card"></div></div>
 

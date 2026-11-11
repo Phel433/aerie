@@ -35,9 +35,9 @@ window.addEventListener('load', () => {
     if (shot === 'sheet') UI.go('fly');
     if (shot === 'flight' || shot === 'results') { startRun({ mode: 'course', courseId: 'harbor-line' }); await wait(5000); }
     if (shot === 'results') { G.run.next = G.run.rings.length; finishCourse(); }
-    if (shot === 'shop') { G.save.coins = 900; UI.tab('shop'); }
+    if (shot === 'shop') { G.save.coins = 900; UI.tab('shop'); await wait(300); const t = document.querySelector('#shop-items .sitem:not(.owned)'); if (t) t.click(); }
     if (shot === 'locker') UI.tab('locker');
-    if (shot === 'map' || shot === 'map-sky') { G.settings.menuMode = shot === 'map' ? 'courses' : 'sky'; UI.flyNow(); }
+    if (shot.startsWith('map')) { G.settings.menuMode = shot.startsWith('map-sky') ? 'sky' : 'courses'; UI.selWorld = shot.split(':')[1]; UI.flyNow(); }
     if (shot === 'boards') { UI.tab('boards'); UI.boardTab = 'canyon-line'; UI.render_boards(); }
     if (shot === 'drawer') UI.toggleDrawer(true);
     if (shot === 'music') $('music-btn').click();

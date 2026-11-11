@@ -46,9 +46,10 @@ function makeMapImage(W) {
 function rebuildPlayerMesh() {
   const P = G.player;
   if (P.mesh) { G.scene.remove(P.mesh); }
-  P.mesh = buildGliderMesh(G.save.frame, G.save.paint);
+  const pv = G.preview || {}; // shop try-on: looks only, handling stays with the equipped frame
+  P.mesh = buildGliderMesh(pv.Frame || G.save.frame, pv.Paint || G.save.paint);
   G.scene.add(P.mesh);
-  const cols = trailColors(G.save.trail, G.save.paint);
+  const cols = trailColors(pv.Trail || G.save.trail, pv.Paint || G.save.paint);
   for (const t of P.trails) { G.scene.remove(t.mesh); t.mesh.geometry.dispose(); }
   P.trails = [makeTrail(cols), makeTrail(cols)];
   P.trails.forEach(t => G.scene.add(t.mesh));
@@ -184,7 +185,13 @@ function startRun(opts) {
   if (G.ghostMesh) { G.scene.remove(G.ghostMesh); G.ghostMesh = null; }
   FX.clear();
   const P = G.player;
-  if (cdef) {
+  if (mode === 'endless') {
+    run.course = endlessChunk(W, cdef, null) || getCourse(cdef, W);
+    run.rings = run.course.rings;
+    G.ringGroup = buildRingMeshes(run.rings, W);
+    G.scene.add(G.ringGroup);
+    placePilot(P.p, run.course.start.pos, run.course.start.dir);
+  } else if (cdef) {
     run.course = getCourse(cdef, W);
     run.rings = run.course.rings;
     for (const r of run.rings) { r.done = false; }
@@ -286,7 +293,7 @@ function stepPlay(dt) {
   // crashed: wait, then respawn
   if (!p.alive) {
     run.crashT -= dt;
-    if (run.crashT <= 0) respawn();
+    if (run.crashT <= 0) { if (run.mode === 'endless') finishEndless('crashed'); else respawn(); }
     syncPlayerMesh(dt, 0);
     updateGhost(run);
     return;
@@ -307,6 +314,12 @@ function stepPlay(dt) {
   else if (run.rings.length && run.next < run.rings.length) {
     const r = run.rings[run.next];
     if (crossesRing(prev, p.pos, r, 1.5, true)) passRing(run, r);
+  }
+  if (run.mode === 'endless') {
+    if (run.next >= run.rings.length - 4) extendEndless(run);
+    const r = run.rings[run.next];
+    // flew past the next ring without going through it, or wandered off: the run is over
+    if (r && (_a.copy(p.pos).sub(r.pos).dot(r.normal) > 25 || p.pos.distanceTo(r.pos) > 700)) { finishEndless('missed'); return; }
   }
   // gates
   for (const gt of W.gates) {
@@ -368,7 +381,7 @@ function passRing(run, r) {
   else Sfx.ring(run.combo);
   run.xpPending += 6;
   if (run.splitsPB && run.splitsPB[run.next - 1] != null) UI.splitDelta(run.t - run.splitsPB[run.next - 1]);
-  if (r.type === 'finish' || run.next >= run.rings.length) {
+  if (run.mode !== 'endless' && (r.type === 'finish' || run.next >= run.rings.length)) {
     if (run.mode === 'race') finishRace(); else finishCourse();
   }
 }
@@ -620,6 +633,39 @@ function finishCourse() {
   });
 }
 
+/* ---------- Endless: the course generator in 10-ring chunks, each one starting where the last ring left off ---------- */
+function endlessChunk(W, cdef, last) {
+  for (let k = 0; k < 6; k++) {
+    const c = generateCourse(W, { kind: cdef.kind, rings: 10, seed: (Math.random() * 2147483647) | 0, from: last ? { pos: last.pos, h: last.h } : null });
+    if (c && c.rings.length >= 3) { c.rings.forEach(r => { if (r.type === 'finish') { r.type = 'normal'; r.r -= 2; } }); return c; }
+  }
+  return null;
+}
+function extendEndless(run) {
+  const c = endlessChunk(run.world, run.cdef, run.rings[run.rings.length - 1]);
+  if (!c) return; // boxed in: no new rings, so the run ends at the last one
+  const base = run.rings.length;
+  c.rings.forEach((r, i) => (r.idx = base + i));
+  const g = buildRingMeshes(c.rings, run.world);
+  while (g.children.length) G.ringGroup.add(g.children[0]);
+  run.rings.push(...c.rings);
+  for (let i = 0; i < run.next - 6; i++) if (run.rings[i].mesh && run.rings[i].mesh.parent) G.ringGroup.remove(run.rings[i].mesh); // keep the scene small
+}
+function finishEndless(reason) {
+  const run = G.run;
+  if (run.finished) return;
+  run.phase = 'done'; run.finished = true;
+  const rings = run.next, id = run.cdef.id, prev = G.save.endless[id] || 0, pb = rings > prev;
+  if (pb) G.save.endless[id] = rings;
+  const xp = 60 + Math.round(run.xpPending);
+  commitRunStats(run, Math.floor(rings / 3));
+  Sfx.finish();
+  const ups = addXp(xp);
+  saveProgress();
+  run.results = { kind: 'endless', rings, pb, prev, reason, xp, levelUps: ups };
+  UI.showResults(run);
+}
+
 function finishAttack() {
   const run = G.run;
   run.phase = 'done'; run.finished = true;
@@ -836,6 +882,7 @@ function updateCamera(dt) {
     if (!G.camPos) G.camPos = _b.clone();
     G.camPos.lerp(_b, 1 - Math.exp(-2 * dt));
     const fl = W.floorAt(G.camPos.x, G.camPos.z) + 3; if (G.camPos.y < fl) G.camPos.y = fl;
+    for (let k = 0; k < 10 && W.clearance(G.camPos.x, G.camPos.y, G.camPos.z).d < 3; k++) G.camPos.lerp(p.pos, 0.3); // canyon walls and pillars
     cam.position.copy(G.camPos); cam.up.copy(WORLD_UP); cam.lookAt(p.pos);
     fov = 55;
   } else if (mode === 'locker') {
@@ -850,7 +897,7 @@ function updateCamera(dt) {
     fov = 45;
   }
   // slide the picture so the glider sits in the open space beside the menu cards
-  const vs = (G.state === 'title' || G.state === 'locker') && G.viewShift;
+  const vs = (G.state === 'title' || G.state === 'locker' || (G.state === 'menu' && UI.screen === 'fly')) && G.viewShift;
   if (vs && (vs.x || vs.y)) cam.setViewOffset(G.W, G.H, -vs.x, -vs.y, G.W, G.H); else if (cam.view && cam.view.enabled) cam.clearViewOffset();
   if (G.shake > 0 || (p.speed > 75 && G.state === 'play')) {
     const s = (G.shake * 1.2 + smooth(75, 120, p.speed) * 0.08) * (G.settings.shake ? 1 : 0);
