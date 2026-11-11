@@ -847,7 +847,8 @@ function updateCamera(dt) {
   const cam = G.camera, p = G.player.p, W = G.world;
   let mode = G.camMode;
   if (G.state === 'menu') mode = 'title';
-  if (G.state === 'locker' || G.state === 'title') mode = 'locker';
+  if (G.state === 'locker') mode = 'locker';
+  if (G.state === 'title') mode = 'orbit';
   if (G.run && G.run.mode === 'race' && G.run.phase === 'lobby') mode = 'locker';
   let fov = G.settings.fov + clamp((p.speed - 32) * 0.28, -4, 24) + (p.boosting ? 5 : 0);
   if (mode === 'cockpit') {
@@ -885,8 +886,22 @@ function updateCamera(dt) {
     for (let k = 0; k < 10 && W.clearance(G.camPos.x, G.camPos.y, G.camPos.z).d < 3; k++) G.camPos.lerp(p.pos, 0.3); // canyon walls and pillars
     cam.position.copy(G.camPos); cam.up.copy(WORLD_UP); cam.lookAt(p.pos);
     fov = 55;
+  } else if (mode === 'orbit') {
+    // main screen: the camera rides along behind the flying glider; drag turns it any way, all the way round
+    const h = Math.atan2(-p.fwd.x, -p.fwd.z);
+    G.camHead = G.camHead == null ? h : G.camHead + wrapAngle(h - G.camHead) * (1 - Math.exp(-2 * dt));
+    const halfW = Math.atan(Math.tan(cam.fov * Math.PI / 360) * cam.aspect), R = Math.max(14, 8 / Math.tan(halfW));
+    if (G.menuYaw == null) G.menuYaw = 0.6;
+    if (G.menuPitch == null) G.menuPitch = 0.2;
+    _q.setFromEuler(_e.set(-G.menuPitch, G.camHead + G.menuYaw, 0, 'YXZ'));
+    const pos = _b.set(0, 0, R).applyQuaternion(_q).add(p.pos);
+    for (let k = 0; k < 10 && W.clearance(pos.x, pos.y, pos.z).d < 3; k++) pos.lerp(p.pos, 0.3); // never inside rock
+    cam.position.copy(pos);
+    cam.up.set(0, 1, 0).applyQuaternion(_q); // up turns with the orbit, so going over the top never flips the view
+    cam.lookAt(p.pos);
+    fov = 45;
   } else if (mode === 'locker') {
-    // basecamp and locker: the camera rides along with the circling glider (G.menuYaw, drag to turn)
+    // skin, shop and phones: the camera rides along with the circling glider (G.menuYaw, drag to turn)
     const parked = G.state === 'title' || G.state === 'locker';
     // step back on narrow (phone) screens so the whole wingspan fits across
     const halfW = Math.atan(Math.tan(cam.fov * Math.PI / 360) * cam.aspect);
@@ -960,7 +975,7 @@ function stepAttract(dt) {
 }
 
 /* basecamp and locker: the glider circles slowly in clear sky */
-const PARK_R = 45;
+const PARK_R = 22, PARK_V = 10; // a tight, slow circle that fits on screen
 function parkGlider() {
   const W = G.world;
   const roomy = (x, y, z) => W.clearance(x, y, z).d > 60 && [0, 1, 2, 3, 4, 5, 6, 7].every(k => W.clearance(x + Math.sin(k * 0.785) * PARK_R, y, z + Math.cos(k * 0.785) * PARK_R).d > 40);
@@ -977,12 +992,12 @@ function parkGlider() {
 }
 function flyParked(dt) {
   const k = G.park, p = G.player.p;
-  k.t += dt * 14 / PARK_R; // 14 m/s around the circle
+  k.t += dt * PARK_V / PARK_R;
   p.pos.set(k.c.x + Math.sin(k.t) * PARK_R, k.c.y + Math.sin(k.t * 2.3) * 1.5, k.c.z + Math.cos(k.t) * PARK_R);
-  _e.set(Math.cos(k.t * 2.3) * 0.08, Math.atan2(-Math.cos(k.t), Math.sin(k.t)), 0.32, 'YXZ'); // nose along the circle, banked into the turn
+  _e.set(Math.cos(k.t * 2.3) * 0.08, Math.atan2(-Math.cos(k.t), Math.sin(k.t)), 0.43, 'YXZ'); // nose along the circle, banked into the turn (~atan(v²/gR))
   p.q.setFromEuler(_e);
   updateAxes(p);
-  p.speed = 14; p.alive = true;
+  p.speed = PARK_V; p.alive = true;
 }
 
 /* ---------- ring visuals each frame ---------- */

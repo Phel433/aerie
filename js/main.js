@@ -42,7 +42,11 @@ function tick(dt) {
       stepAttract(dt);
       UI.handleNav();
       break;
-    case 'title': case 'locker':
+    case 'title':
+      stepAttract(dt);
+      UI.handleNav();
+      break;
+    case 'locker':
       if (G.park) flyParked(dt);
       syncPlayerMesh(dt, 0.4);
       UI.handleNav();

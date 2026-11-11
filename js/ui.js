@@ -47,10 +47,16 @@ const UI = {
     window.addEventListener('keydown', e => { if (e.key === 'Enter' && this.screen === 'title' && G.state === 'title' && !/INPUT|TEXTAREA|BUTTON/.test(e.target.tagName)) { Sfx.init(); this.flyNow(); } });
     // drag the empty sky on the basecamp or locker to turn the glider
     let spin = null;
-    const spinStart = e => { if (e.target === e.currentTarget || e.target.id === 'nameplate') { spin = e.clientX; this.dragging = true; } };
+    let spinY = 0;
+    const spinStart = e => { if (e.target === e.currentTarget || e.target.id === 'nameplate') { spin = e.clientX; spinY = e.clientY; this.dragging = true; } };
     $('scr-title').addEventListener('pointerdown', spinStart);
     $('scr-locker').addEventListener('pointerdown', spinStart);
-    window.addEventListener('pointermove', e => { if (spin == null) return; G.menuYaw = (G.menuYaw || 0) - (e.clientX - spin) * 0.01; spin = e.clientX; });
+    window.addEventListener('pointermove', e => {
+      if (spin == null) return;
+      G.menuYaw = (G.menuYaw || 0) - (e.clientX - spin) * 0.01;
+      G.menuPitch = (G.menuPitch || 0) + (e.clientY - spinY) * 0.01; // no limit: the camera can go right over the top
+      spin = e.clientX; spinY = e.clientY;
+    });
     window.addEventListener('pointerup', () => { spin = null; this.dragging = false; });
     Net.on(() => this.onNet());
     // photo-mode orbit
@@ -88,11 +94,12 @@ const UI = {
   },
   open(name) {
     $('hud').hidden = true; $('ov-pause').hidden = true; $('ov-results').hidden = true;
-    const wasParked = G.state === 'title' || G.state === 'locker', toParked = name === 'title' || name === 'locker' || name === 'shop';
+    const wasParked = G.state === 'locker', toParked = name === 'locker' || name === 'shop';
     if (wasParked && !toParked) startAttract(G.worldId);
     if (G.preview && name !== 'shop') { G.preview = null; this.shopSel = null; rebuildPlayerMesh(); } // drop the shop try-on
     $('ov-buy').hidden = true;
     G.state = name === 'title' ? 'title' : toParked ? 'locker' : 'menu';
+    if (name === 'title' && !G.attract) startAttract(G.worldId);
     this.showOnly(name);
     const r = this['render_' + name];
     if (r) r.call(this);
