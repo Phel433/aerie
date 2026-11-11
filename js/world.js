@@ -672,8 +672,15 @@ function addThermalVisuals(W) {
 function placeShards(W, def, rnd) {
   const want = 20;
   let tries = 0;
-  const ok = (x, y, z) => W.clearance(x, y, z).d > 5 && W.inBounds(x, z) && !W.shards.some(s => s.pos.distanceTo(new THREE.Vector3(x, y, z)) < 160);
   while (W.shards.length < want && tries++ < 8000) {
+    const [x, y, z] = shardSpot(W, def, rnd);
+    if (!shardOk(W, x, y, z, W.shards, 160)) continue;
+    W.shards.push({ id: W.shards.length, pos: new THREE.Vector3(x, y, z), mesh: null, beam: null });
+  }
+}
+const shardOk = (W, x, y, z, others, gap) => W.clearance(x, y, z).d > 5 && W.inBounds(x, z) && !others.some(s => s.pos.distanceTo(_v.set(x, y, z)) < gap);
+/* a candidate shard spot: under or on an island, on a spire top, or low over open ground, lifted clear of walls and trees */
+function shardSpot(W, def, rnd) {
     const mode = rnd();
     let x, y, z;
     if (W.islands && W.islands.length && mode < 0.4) {
@@ -687,9 +694,51 @@ function placeShards(W, def, rnd) {
       if (def.kind === 'islands') y = rnd.range(30, 120);
       y = liftClear(W, x, y, z);
     }
-    if (!ok(x, y, z)) continue;
-    W.shards.push({ id: W.shards.length, pos: new THREE.Vector3(x, y, z), mesh: null, beam: null });
+    return [x, y, z];
+}
+/* every run: shards still to find (not in keep) move to fresh random spots, checked the same way as at world build */
+function scatterShards(W, keep) {
+  const rnd = RNG((Math.random() * 2147483647) | 0);
+  for (const s of W.shards) if (!keep.includes(s.id)) moveShard(W, s, rnd);
+}
+function moveShard(W, s, rnd) {
+  const others = W.shards.filter(o => o !== s);
+  for (let t = 0; t < 600; t++) {
+    const [x, y, z] = shardSpot(W, W.def, rnd);
+    if (shardOk(W, x, y, z, others, t < 300 ? 160 : 70)) { s.pos.set(x, y, z); return; }
   }
+}
+
+/* ---------- weather: each world's own look is "clear"; the others are blended from it and faded in ---------- */
+const WEATHERS = ['clear', 'fog', 'rain', 'sunset', 'night'];
+const WEATHER_NAMES = { clear: 'Clear', fog: 'Fog', rain: 'Rain', sunset: 'Sunset', night: 'Night' };
+function initWeather(W) {
+  const u = W.skyMat.uniforms, f = G.scene.fog;
+  const base = { fog: f.color.clone(), near: f.near, far: f.far, top: u.top.value.clone(), mid: u.mid.value.clone(), bot: u.bottom.value.clone(), sun: W.sun.intensity, hemi: W.hemi.intensity, rain: W.rain ? 1 : 0, exp: 1 };
+  W.wx = { base, kind: 'clear', to: weatherLook(base, 'clear'), cur: weatherLook(base, 'clear') };
+}
+function weatherLook(b, kind) {
+  const m = (c, hex, k) => c.clone().lerp(_col.set(hex), k);
+  const o = { fog: b.fog.clone(), near: b.near, far: b.far, top: b.top.clone(), mid: b.mid.clone(), bot: b.bot.clone(), sun: b.sun, hemi: b.hemi, rain: b.rain, exp: 1 };
+  if (kind === 'fog') Object.assign(o, { fog: m(b.fog, '#c8d0d8', 0.6), near: 20, far: b.far * 0.3, top: m(b.top, '#c8d0d8', 0.7), mid: m(b.mid, '#c8d0d8', 0.7), bot: m(b.bot, '#c8d0d8', 0.7), sun: b.sun * 0.55 });
+  if (kind === 'rain') Object.assign(o, { fog: m(b.fog, '#56606c', 0.6), near: b.near * 0.4, far: b.far * 0.5, top: m(b.top, '#4a525c', 0.65), mid: m(b.mid, '#4a525c', 0.65), bot: m(b.bot, '#4a525c', 0.65), sun: b.sun * 0.35, hemi: b.hemi * 0.75, rain: 1, exp: 0.78 });
+  if (kind === 'sunset') Object.assign(o, { fog: m(b.fog, '#e48a62', 0.5), top: m(b.top, '#3d2a66', 0.6), mid: m(b.mid, '#ff9a5c', 0.6), bot: m(b.bot, '#ffcf9a', 0.5), sun: b.sun * 0.8, hemi: b.hemi * 0.8 });
+  if (kind === 'night') Object.assign(o, { fog: m(b.fog, '#0a1228', 0.8), far: b.far * 0.7, top: m(b.top, '#070d22', 0.8), mid: m(b.mid, '#122046', 0.8), bot: m(b.bot, '#1a2850', 0.8), sun: b.sun * 0.15, hemi: b.hemi * 0.45, exp: 0.5 }); // exposure dims clouds and islands too, which don't follow the lights
+  return o;
+}
+function setWeather(W, kind) { if (!W.wx) return; W.wx.kind = kind; W.wx.to = weatherLook(W.wx.base, kind); }
+function randomWeather(W) { const k = WEATHERS.filter(x => !W.wx || x !== W.wx.kind)[Math.floor(Math.random() * (WEATHERS.length - 1))]; setWeather(W, k); return k; }
+function stepWeather(W, dt) {
+  const c = W.wx.cur, t = W.wx.to, k = 1 - Math.exp(-1.5 * dt), f = G.scene.fog, u = W.skyMat.uniforms;
+  for (const key of ['fog', 'top', 'mid', 'bot']) c[key].lerp(t[key], k);
+  for (const key of ['near', 'far', 'sun', 'hemi', 'rain', 'exp']) c[key] += (t[key] - c[key]) * k;
+  G.renderer.toneMappingExposure = 0.92 * c.exp;
+  f.color.copy(c.fog); f.near = c.near; f.far = c.far;
+  if (G.scene.background) G.scene.background.copy(c.fog);
+  u.top.value.copy(c.top); u.mid.value.copy(c.mid); u.bottom.value.copy(c.bot);
+  W.sun.intensity = c.sun; W.hemi.intensity = c.hemi;
+  if (c.rain > 0.02 && !W.rain) buildRain(W);
+  if (W.rain) { W.rain.visible = c.rain > 0.02; W.rain.material.opacity = 0.55 * c.rain; }
 }
 
 /* clearance only measures straight down to the ground, so a shard can sit beside a canyon wall or inside a tree: lift it until there is room all round */
@@ -727,6 +776,7 @@ function buildRain(W) {
 /* ---------- per-frame world animation ---------- */
 function updateWorld(W, dt, camPos) {
   W.time += dt;
+  if (W.wx) stepWeather(W, dt);
   const t = W.time;
   for (const f of W.anim) f(dt, t);
   if (W.water && G.quality !== 'low') {

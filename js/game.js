@@ -14,6 +14,7 @@ function loadWorld(id) {
   G.scene.add(W.group); G.scene.add(W.skyGroup);
   G.scene.fog = new THREE.Fog(def.fog.color, def.fog.near * 1.4, def.fog.far * 1.15 * (G.settings.quality === 'low' ? 0.8 : 1));
   G.scene.background = new THREE.Color(def.fog.color);
+  initWeather(W);
   W.mapImg = makeMapImage(W);
   Sfx.setSong(def.music.root, def.music.mode);
   Net.setLobbyPresence();
@@ -179,6 +180,8 @@ function startRun(opts) {
     timeLimit: mode === 'attack' ? 120000 : 0, finished: false, results: null, boardGhost: opts.ghost || null
   };
   G.run = run;
+  run.weather = !!opts.weather; // Board switch: weather changes on every ring or gem
+  setWeather(W, 'clear');
   // clean previous objects
   if (G.ringGroup) { G.scene.remove(G.ringGroup); G.ringGroup = null; }
   if (G.shardGroup) { G.scene.remove(G.shardGroup); G.shardGroup = null; }
@@ -201,13 +204,16 @@ function startRun(opts) {
     run.medals = run.course.medals;
     if (mode !== 'race') setupGhost(run);
   } else if (mode === 'attack') {
-    run.rings = generateField(W, hashStr(worldId + 'field'));
+    run.rings = generateField(W, (Math.random() * 2147483647) | 0); // a new ring field every run
     run.rings.forEach(r => { r.done = false; r.respawn = 0; });
     G.ringGroup = buildRingMeshes(run.rings, W);
     G.scene.add(G.ringGroup);
     spawnOpenAir(P.p, W);
   } else {
-    G.shardGroup = buildShardMeshes(W, G.save.shards[worldId] || []);
+    // shards still to find sit somewhere new every run; Gem Rush uses all 20
+    const got = mode === 'gems' ? [] : G.save.shards[worldId] || [];
+    scatterShards(W, got);
+    G.shardGroup = buildShardMeshes(W, got);
     G.scene.add(G.shardGroup);
     spawnOpenAir(P.p, W);
   }
@@ -368,6 +374,7 @@ function passRing(run, r) {
   const p = G.player.p;
   r.done = true; r.pop = 1;
   run.next++;
+  weatherChange(run);
   run.lastRing = r;
   run.splits.push(run.t);
   run.stats.rings++; run.coins = (run.coins || 0) + 1;
@@ -534,7 +541,20 @@ function respawn() {
   G.camPos = null;
 }
 
+function weatherChange(run) { if (run.weather) UI.flash('Weather: ' + WEATHER_NAMES[randomWeather(run.world)], true); }
 function collectShard(run, s) {
+  weatherChange(run);
+  if (run.mode === 'gems') {
+    // Gem Rush: nothing is saved per gem; the gem just turns up somewhere else
+    run.gems = (run.gems || 0) + 1; run.coins = (run.coins || 0) + 2;
+    FX.burst(s.pos, '#7fe8ff', 60, 24, 1.2, 3);
+    Sfx.shard();
+    run.stats.shards++;
+    award(run, TRICKS.shard.name, TRICKS.shard.pts);
+    moveShard(run.world, s, RNG((Math.random() * 2147483647) | 0));
+    s.mesh.position.copy(s.pos); s.beam.position.copy(s.pos);
+    return;
+  }
   const id = G.worldId;
   const list = G.save.shards[id] = G.save.shards[id] || [];
   if (!list.includes(s.id)) list.push(s.id);
@@ -693,9 +713,11 @@ function endFreeFlight() {
   const xp = 40 + Math.round(run.xpPending) + Math.round(run.stats.km * 25);
   commitRunStats(run, Math.min(20, Math.floor(run.stats.km * 2)));
   if (run.mode === 'sky') challengeStat('opensky', run.skyT || 0);
+  let gems = null, prevGems = 0;
+  if (run.mode === 'gems') { gems = run.gems || 0; prevGems = G.save.gemrush[G.worldId] || 0; if (gems > prevGems) G.save.gemrush[G.worldId] = gems; }
   const ups = addXp(xp);
   saveProgress();
-  run.results = { kind: 'free', xp, levelUps: ups };
+  run.results = { kind: 'free', xp, levelUps: ups, gems, prevGems };
   UI.showResults(run);
 }
 
@@ -944,6 +966,7 @@ function startAttract(worldId) {
   const cdef = COURSE_BY_ID[W.def.id + '-line'];
   const course = getCourse(cdef, W);
   G.attract = { course, idx: 0 };
+  setWeather(W, 'clear');
   if (G.ringGroup) { G.scene.remove(G.ringGroup); G.ringGroup = null; }
   if (G.shardGroup) { G.scene.remove(G.shardGroup); G.shardGroup = null; }
   if (G.ghostMesh) { G.scene.remove(G.ghostMesh); G.ghostMesh = null; }

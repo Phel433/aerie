@@ -32,6 +32,13 @@ window.addEventListener('load', () => {
       await wait(3500); G.state = 'pause';
       return;
     }
+    // weather look check: ?shot=wx:<kind>[:<world>]
+    if (shot.startsWith('wx:')) {
+      const [, kind, wid] = shot.split(':');
+      startRun({ mode: 'course', courseId: (wid || 'canyon') + '-line' }); await wait(1500);
+      setWeather(G.world, kind); const c = G.world.wx; c.cur = weatherLook(c.base, kind); stepWeather(G.world, 0);
+      return;
+    }
     if (shot === 'sheet') UI.go('fly');
     if (shot === 'flight' || shot === 'results') { startRun({ mode: 'course', courseId: 'harbor-line' }); await wait(5000); }
     if (shot === 'results') { G.run.next = G.run.rings.length; finishCourse(); }

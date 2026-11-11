@@ -308,6 +308,9 @@ const UI = {
       }
       panel.appendChild(opt('Score Attack', 'Two minutes · best ' + fmtNum(G.save.attack[w.id] || 0), 'Fly', () => this.launch({ mode: 'attack', worldId: w.id })));
       panel.appendChild(opt('Explore', 'No timer · find the Sky Shards', 'Fly', () => this.launch({ mode: 'free', worldId: w.id })));
+      const found = (G.save.shards[w.id] || []).length;
+      if (found >= 20) panel.appendChild(opt('Gem Rush', 'Endless gems · each one you grab makes a new one · best ' + (G.save.gemrush[w.id] || 0), 'Fly', () => this.launch({ mode: 'gems', worldId: w.id })));
+      else panel.appendChild(opt('Gem Rush', 'Find all 20 Sky Shards here to open it (' + found + ' / 20)', 'Locked', () => {}, true));
     } else if (intent === 'sky') {
       panel.appendChild(opt('Join Open Sky', Net.hasRoom ? 'Puts you on the first server with space' : 'Offline, so you fly alone', 'Fly', () => this.launch({ mode: 'sky', worldId: w.id })));
       for (const s of Net.skyServers(w.id)) panel.appendChild(opt('Server ' + s.n, s.count + ' / ' + Net.SKY_CAP + ' pilots', s.full ? 'Full' : 'Join', () => this.launch({ mode: 'sky', worldId: w.id, server: s.n }), s.full));
@@ -536,10 +539,11 @@ const UI = {
     }
     const cdef = courseDefById(t);
     const rows = Net.rankings(t).slice(0, 50);
-    body.innerHTML = '<div class="row" style="justify-content:space-between"><div class="row">' + tag(COURSE_KINDS[cdef.kind].diff) + '<div class="label">' + escapeHtml(WORLD_BY_ID[cdef.world].name) + ' · ' + escapeHtml(cdef.name) + ' · your best ' + fmtTime(G.save.best[t]) + ' · Endless best ' + fmtNum(G.save.endless[t] || 0) + ' rings</div></div><div class="row"><button class="btn small ghost" id="board-endless">Endless</button><button class="btn small" id="board-fly">Fly this course</button></div></div>' +
+    body.innerHTML = '<div class="row" style="justify-content:space-between"><div class="row">' + tag(COURSE_KINDS[cdef.kind].diff) + '<div class="label">' + escapeHtml(WORLD_BY_ID[cdef.world].name) + ' · ' + escapeHtml(cdef.name) + ' · your best ' + fmtTime(G.save.best[t]) + ' · Endless best ' + fmtNum(G.save.endless[t] || 0) + ' rings</div></div><div class="row"><button class="btn small ghost" id="board-weather" aria-pressed="' + !!G.settings.weather + '">Weather: ' + (G.settings.weather ? 'On' : 'Off') + '</button><button class="btn small ghost" id="board-endless">Endless</button><button class="btn small" id="board-fly">Fly this course</button></div></div>' +
       (rows.length ? '<div class="tablewrap"><table><thead><tr><th>#</th><th>Pilot</th><th>Level</th><th style="text-align:right">Time</th><th></th></tr></thead><tbody>' + rows.map((r, i) => '<tr class="' + (r.me ? 'me' : '') + '"><td class="num">' + (i + 1) + '</td><td>' + escapeHtml(r.cs) + '</td><td class="num">' + r.lvl + '</td><td class="num" style="text-align:right">' + fmtTime(r.t) + '</td><td style="text-align:right"><button class="btn small ghost" data-ghost="' + escapeHtml(r.uid) + '" data-cs="' + escapeHtml(r.cs) + '">Race ghost</button></td></tr>').join('') + '</tbody></table></div>' : '<p class="muted">No times yet. Fly it and claim the top spot.</p>');
-    $('board-fly').onclick = () => { Sfx.click(); this.launch({ mode: 'course', courseId: t }); };
-    $('board-endless').onclick = () => { Sfx.click(); this.launch({ mode: 'endless', courseId: t }); };
+    $('board-fly').onclick = () => { Sfx.click(); this.launch({ mode: 'course', courseId: t, weather: G.settings.weather }); };
+    $('board-endless').onclick = () => { Sfx.click(); this.launch({ mode: 'endless', courseId: t, weather: G.settings.weather }); };
+    $('board-weather').onclick = () => { Sfx.ui(); G.settings.weather = !G.settings.weather; saveSettings(); this.renderBoard(); };
     body.querySelectorAll('[data-ghost]').forEach(b => (b.onclick = async () => {
       Sfx.click();
       if (!worldUnlocked(WORLD_BY_ID[cdef.world])) { this.toast('World locked', 'Earn more medals to fly ' + WORLD_BY_ID[cdef.world].name + '.', '#ff9d5c'); return; }
@@ -620,9 +624,9 @@ const UI = {
     this.showOnly('none');
     $('ov-pause').hidden = true; $('ov-results').hidden = true;
     $('hud').hidden = false;
-    const name = run.mode === 'endless' ? 'Endless · ' + run.cdef.name : run.cdef ? run.cdef.name : run.mode === 'attack' ? 'Score Attack' : run.mode === 'sky' ? 'Open Sky' : 'Explore';
+    const name = run.mode === 'endless' ? 'Endless · ' + run.cdef.name : run.mode === 'gems' ? 'Gem Rush' : run.cdef ? run.cdef.name : run.mode === 'attack' ? 'Score Attack' : run.mode === 'sky' ? 'Open Sky' : 'Explore';
     $('h-mode').textContent = WORLD_BY_ID[G.worldId].short + ' · ' + name;
-    $('h-score').hidden = !(run.mode === 'attack' || run.mode === 'free' || run.mode === 'sky');
+    $('h-score').hidden = !(run.mode === 'attack' || run.mode === 'free' || run.mode === 'sky' || run.mode === 'gems');
     $('h-pilots').hidden = run.mode !== 'sky';
     $('standings').hidden = run.mode !== 'race';
     $('h-target').textContent = run.mode === 'endless' ? 'Best ' + (G.save.endless[run.cdef.id] || 0) + ' rings' : '';
@@ -671,7 +675,7 @@ const UI = {
     btns.push(['Change camera (' + CAM_NAMES[G.camMode].replace(' camera', '') + ')', () => { cycleCamera(); this.pause(); }]);
     btns.push(['Settings', () => this.pauseSettings()]);
     btns.push(['Sound: ' + (G.settings.master > 0 ? 'On' : 'Off'), () => { G.settings.master = G.settings.master > 0 ? 0 : 0.8; saveSettings(); Sfx.setVolumes(G.settings.master, G.settings.music, G.settings.sfx); this.pause(); }]);
-    if (run.mode === 'free' || run.mode === 'sky') btns.push(['End flight', () => { $('ov-pause').hidden = true; G.state = 'play'; endFreeFlight(); }]);
+    if (run.mode === 'free' || run.mode === 'sky' || run.mode === 'gems') btns.push(['End flight', () => { $('ov-pause').hidden = true; G.state = 'play'; endFreeFlight(); }]);
     btns.push([run.mode === 'race' || run.mode === 'sky' ? 'Leave' : 'Quit to menu', () => this.quitToMenu()]);
     $('pause-btns').innerHTML = btns.map((b, i) => '<button class="btn ' + (i ? 'ghost' : '') + '" data-i="' + i + '">' + escapeHtml(b[0]) + '</button>').join('');
     $('pause-btns').querySelectorAll('button').forEach(b => (b.onclick = () => { Sfx.click(); btns[+b.dataset.i][1](); }));
@@ -746,7 +750,9 @@ const UI = {
         '<div class="tablewrap"><table><tbody>' + list.map((i, k) => '<tr class="' + (i.me ? 'me' : '') + '"><td class="num">' + (k + 1) + '</td><td>' + escapeHtml(i.cs) + '</td><td class="num" style="text-align:right">' + (i.ft != null ? fmtTime(i.ft) : 'did not finish') + '</td></tr>').join('') + '</tbody></table></div>' + xpLine;
       btns = [['Back to lobby', () => { $('ov-results').hidden = true; backToLobby(); }], ['Leave', () => this.quitToMenu()]];
     } else {
-      html = '<div class="label">' + escapeHtml(WORLD_BY_ID[G.worldId].name) + '</div><h2>Flight log</h2><div class="muted">' + (G.save.shards[G.worldId] || []).length + ' / 20 shards found here.</div>' + xpLine + stats;
+      html = R.gems != null
+        ? '<div class="label">' + escapeHtml(WORLD_BY_ID[G.worldId].name) + ' · Gem Rush</div><h2>' + (R.gems > R.prevGems ? 'New best' : 'Gem Rush') + '</h2><div class="res-big num">' + fmtNum(R.gems) + ' gems</div><div class="muted">' + (R.prevGems ? 'Previous best ' + fmtNum(R.prevGems) : 'First Gem Rush here') + '</div>' + xpLine + stats
+        : '<div class="label">' + escapeHtml(WORLD_BY_ID[G.worldId].name) + '</div><h2>Flight log</h2><div class="muted">' + (G.save.shards[G.worldId] || []).length + ' / 20 shards found here.</div>' + xpLine + stats;
       btns = [['Keep flying', () => startRun({ mode: run.mode, worldId: G.worldId })], ['Menu', () => this.quitToMenu()]];
     }
     card.innerHTML = html + '<div class="row">' + btns.map((b, i) => '<button class="btn' + (i ? ' ghost' : '') + '" data-i="' + i + '">' + escapeHtml(b[0]) + '</button>').join('') + '</div>';
@@ -794,9 +800,10 @@ const UI = {
     set('h-alt', String(Math.max(0, Math.round(p.pos.y - (run.world.waterLevel > -1e5 ? run.world.waterLevel : 0)))));
     $('h-boost').style.width = Math.round(p.boost * 100) + '%';
     if (run.mode === 'attack') set('h-time', fmtTime(Math.max(0, run.timeLimit - run.t)));
-    else if (run.mode === 'free' || run.mode === 'sky') set('h-time', run.stats.km.toFixed(2) + ' km');
+    else if (run.mode === 'free' || run.mode === 'sky' || run.mode === 'gems') set('h-time', run.stats.km.toFixed(2) + ' km');
     else set('h-time', fmtTime(run.t));
     if (run.mode === 'endless') set('h-rings', run.next + ' rings');
+    else if (run.mode === 'gems') set('h-rings', (run.gems || 0) + ' gems');
     else if (run.rings.length && run.mode !== 'attack') set('h-rings', Math.min(run.next, run.rings.length) + ' / ' + run.rings.length);
     else if (run.mode === 'attack') set('h-rings', run.stats.rings + ' rings');
     else set('h-rings', (G.save.shards[G.worldId] || []).length + ' / 20 shards');
