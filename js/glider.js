@@ -132,6 +132,8 @@ function flyPilot(p, ctl, dt, W, assist) {
   let tRoll;
   if (Math.abs(spin) > 0.08) tRoll = spin * F.roll * auth;
   else if (mode === 'roll' && Math.abs(steer) > 0.1) tRoll = steer * F.roll * auth;
+  // upside down and pulling W/S: hold the roll so S pulls through into a dive (split-S) instead of snapping upright first
+  else if (Math.abs(ctl.pitch) > 0.1 && Math.abs(steer) <= 0.1 && p.up.y < 0) tRoll = 0;
   else tRoll = clamp((steer * maxBank - rollA) * 5, -F.roll, F.roll);
   if (assist && Math.abs(ctl.pitch) < 0.08 && p.up.y > 0.4 && Math.abs(p.fwd.y) < 0.5) tPitch += -p.fwd.y * 0.35;
   // a stalled wing drops its nose
