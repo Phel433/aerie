@@ -20,7 +20,7 @@ Runs as a claude.ai artifact (private until the owner shares it). One HTML page 
 
 ## Capabilities and Constraints
 - Modes: ring courses (line, gauntlet), Score Attack, Explore, daily course, live race, Open Sky.
-- Controls: W/S pitch (stops at 70°), A/D steering with three modes (steep bank, free roll, sharp turn; T switches), Q/E barrel roll, Space boost, Shift brake, C camera, R last ring, P photo, M map. Touch stick plus BOOST/BRAKE/CAM/BACK buttons. Gamepad.
+- Controls: W/S pitch (loops freely; the autopilot keeps a 70° stop), A/D steering with three modes (steep bank, free roll, sharp turn; T switches), Q/E barrel roll, Space boost, Shift brake, C camera, R last ring, P photo, M map. Touch stick plus BOOST/BRAKE/CAM/BACK buttons. Gamepad.
 - Gameplay, physics and controls are fixed for visual work.
 - Progression: XP levels, 5 frames, 24 paints, 12 trails, 42 achievements, daily challenges.
 

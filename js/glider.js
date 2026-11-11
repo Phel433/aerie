@@ -107,7 +107,7 @@ function updateAxes(p) {
   p.right.copy(V_RIGHT).applyQuaternion(p.q);
 }
 
-const MAX_BANK = 0.52, TURN_RATE = 0.9, MAX_PITCH = 1.22; // ~30° visual bank; heading rad/s; ~70° climb/dive limit
+const MAX_BANK = 0.52, TURN_RATE = 0.9, MAX_PITCH = 1.22; // ~30° visual bank; heading rad/s; ~70° climb/dive limit (autopilot only)
 /* ctl: {pitch, roll, yaw, boost, brake}; pitch + = nose up, roll + = steer right, yaw + = free roll left */
 function flyPilot(p, ctl, dt, W, assist) {
   const F = p.frame;
@@ -136,15 +136,17 @@ function flyPilot(p, ctl, dt, W, assist) {
   else if (Math.abs(ctl.pitch) > 0.1 && Math.abs(steer) <= 0.1 && p.up.y < 0) tRoll = 0;
   else tRoll = clamp((steer * maxBank - rollA) * 5, -F.roll, F.roll);
   if (assist && Math.abs(ctl.pitch) < 0.08 && p.up.y > 0.4 && Math.abs(p.fwd.y) < 0.5) tPitch += -p.fwd.y * 0.35;
-  // a stalled wing drops its nose
-  if (p.stall > 0 && p.fwd.y > -0.7) tPitch -= p.stall * 1.3;
-  // W/S climb and dive stop at MAX_PITCH, so holding them can't carry the nose over into a loop.
-  // The climb limit also shrinks as speed bleeds off, so a held climb eases into a shallow climb instead of stalling and see-sawing.
-  const pa = Math.asin(clamp(p.fwd.y, -1, 1));
-  const capUp = lerp(0, MAX_PITCH, smooth(F.stall + 6, F.stall + 28, p.speed));
-  if (tPitch > 0) tPitch = Math.min(tPitch * clamp((capUp - pa) / 0.25, 0, 1), (capUp - pa) * 2.5);
-  else tPitch *= clamp((MAX_PITCH + pa) / 0.25, 0, 1);
-  if ((pa > capUp && p.wp > 0) || (pa < -MAX_PITCH && p.wp < 0)) p.wp = 0;
+  // a stalled wing drops its nose toward the ground, upright or upside down (so a slow loop falls through instead of hanging)
+  if (p.stall > 0 && p.fwd.y > -0.7) tPitch -= p.stall * 1.3 * (p.up.y < 0 ? -1 : 1);
+  // players pitch freely, so holding W/S loops all the way round. The autopilot (title flyby, par times) keeps the old stop at
+  // MAX_PITCH, with a climb limit that shrinks as speed bleeds off, so medal times stay the same.
+  if (!ctl.mode) {
+    const pa = Math.asin(clamp(p.fwd.y, -1, 1));
+    const capUp = lerp(0, MAX_PITCH, smooth(F.stall + 6, F.stall + 28, p.speed));
+    if (tPitch > 0) tPitch = Math.min(tPitch * clamp((capUp - pa) / 0.25, 0, 1), (capUp - pa) * 2.5);
+    else tPitch *= clamp((MAX_PITCH + pa) / 0.25, 0, 1);
+    if ((pa > capUp && p.wp > 0) || (pa < -MAX_PITCH && p.wp < 0)) p.wp = 0;
+  }
   p.wp = damp(p.wp, tPitch, 9, dt);
   p.wr = damp(p.wr, tRoll, 11, dt);
   _e.set(p.wp * dt, 0, -p.wr * dt, 'XYZ');

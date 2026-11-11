@@ -601,7 +601,7 @@ const UI = {
     $('howto-body').innerHTML =
       '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:22px">' +
       '<div><div class="label" style="margin-bottom:8px">Keyboard</div><div class="keys">' +
-      '<span><kbd>W</kbd> <kbd>S</kbd></span><span>Dive / climb (swap in Settings)</span>' +
+      '<span><kbd>W</kbd> <kbd>S</kbd></span><span>Dive / climb, hold to loop (swap in Settings)</span>' +
       '<span><kbd>A</kbd> <kbd>D</kbd></span><span>Turn left / right</span>' +
       '<span><kbd>T</kbd></span><span>Switch steering: steep bank, free roll, sharp turn</span>' +
       '<span><kbd>←</kbd> <kbd>→</kbd> or <kbd>Q</kbd> <kbd>E</kbd></span><span>Barrel roll left / right (hold)</span>' +
