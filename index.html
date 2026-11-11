@@ -117,8 +117,11 @@
   <section class="screen" id="scr-fly" hidden>
     <div class="map-head"><button class="back" data-back>Back</button><h2 id="map-title">Pick a world</h2><span class="pill" id="map-mode"></span></div>
     <div class="map-body">
-      <div class="map-wrap" id="map-wrap"><svg id="map-svg" viewBox="0 0 1000 620" aria-hidden="true"></svg><div id="map-pins"></div></div>
-      <aside class="map-panel" id="map-panel"></aside>
+      <div class="map-list" id="map-pins" role="listbox" aria-label="Worlds"></div>
+      <div class="map-stage">
+        <div class="map-pic" id="map-pic"><img id="map-img" src="thumbs/world-harbor.jpg" alt=""><div class="cap" id="map-cap"></div></div>
+        <div class="map-panel" id="map-panel"></div>
+      </div>
     </div>
   </section>
 

@@ -3,7 +3,6 @@
 
 const $ = id => document.getElementById(id);
 /* map spots for the seven worlds, in a 1000 x 620 picture */
-const MAP_POS = [[150, 440], [300, 230], [500, 120], [470, 420], [680, 270], [860, 130], [830, 470]];
 /* little colour sample for a frame, paint or trail */
 function swatchHtml(kind, it) {
   if (kind === 'Paint') return '<div class="swatch" style="background:linear-gradient(90deg,' + it.a + ' 0 60%,' + it.b + ' 60%)"></div>';
@@ -114,6 +113,7 @@ const UI = {
   },
   updateCoins() { $('coin-count').textContent = fmtNum(G.save ? G.save.coins || 0 : 0); },
   back() {
+    if (this.fromPause) { this.fromPause = false; $('scr-settings').hidden = true; this.screen = 'none'; this.pause(); return; }
     const prev = this.stack.pop() || 'title';
     this.open(prev);
   },
@@ -128,7 +128,8 @@ const UI = {
     const I = Input.state;
     const vis = [...document.querySelectorAll('.overlay:not([hidden]) button:not([disabled]), #lobby:not([hidden]) button:not([disabled]), #drawer:not([hidden]) button, #music-pop:not([hidden]) button')];
     const pool = vis.length ? vis : [...document.querySelectorAll('.screen:not([hidden]) button:not([disabled]), #topbar:not([hidden]) button')];
-    if (I.back && G.state !== 'play') {
+    // on the pause menu Esc only resumes (main.js), so it must not also walk back to a menu screen
+    if (I.back && G.state !== 'play' && (G.state !== 'pause' || this.fromPause)) {
       if (!$('ov-results').hidden) return;
       if (!$('drawer').hidden || !$('music-pop').hidden) { this.toggleDrawer(false); $('music-pop').hidden = true; return; }
       if (this.screen && this.screen !== 'title') { this.back(); return; }
@@ -250,18 +251,6 @@ const UI = {
     $('map-title').textContent = intent === 'sky' ? 'Open Sky' : intent === 'race' ? 'Race rooms' : 'Pick a world';
     $('map-mode').textContent = intent === 'sky' ? 'Free flight with others' : intent === 'race' ? 'Live races' : 'Courses';
     const by = this.lobbyBy();
-    // islands drawn from a seeded outline, one per world, joined by a dotted route
-    let svg = '<path d="' + MAP_POS.map((q, i) => (i ? 'L' : 'M') + q[0] + ' ' + q[1]).join(' ') + '" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="3" stroke-dasharray="2 12" stroke-linecap="round"/>';
-    WORLDS.forEach((w, i) => {
-      const [cx, cy] = MAP_POS[i], r = RNG(hashStr(w.id + 'map'));
-      const blob = (rad, k) => { let d = ''; for (let a = 0; a < 16; a++) { const t = a / 16 * TAU, rr = rad * (0.78 + r() * 0.34) * k; d += (a ? 'L' : 'M') + (cx + Math.cos(t) * rr * 1.25).toFixed(1) + ' ' + (cy + Math.sin(t) * rr * 0.8).toFixed(1); } return d + 'Z'; };
-      const sea = w.water ? w.water.color : w.cloudSea || '#dfe8f2';
-      svg += '<path d="' + blob(92, 1) + '" fill="' + sea + '" opacity="0.35"/>';
-      svg += '<path d="' + blob(70, 1) + '" fill="' + w.land.low + '" stroke="rgba(255,255,255,0.5)" stroke-width="2"/>';
-      svg += '<path d="' + blob(44, 1) + '" fill="' + w.land.mid + '"/>';
-      svg += '<path d="' + blob(20, 1) + '" fill="' + w.land.peak + '"/>';
-    });
-    $('map-svg').innerHTML = svg;
     const pins = $('map-pins'); pins.innerHTML = '';
     WORLDS.forEach((w, i) => {
       const ok = worldUnlocked(w);
@@ -272,7 +261,7 @@ const UI = {
         : medals + '/2 medals · ' + (G.save.shards[w.id] || []).length + '/20 shards';
       const b = document.createElement('button');
       b.className = 'pin' + (w.id === this.selWorld ? ' sel' : '') + (ok ? '' : ' locked');
-      b.style.left = MAP_POS[i][0] / 10 + '%'; b.style.top = MAP_POS[i][1] / 6.2 + '%';
+      b.setAttribute('role', 'option'); b.setAttribute('aria-selected', w.id === this.selWorld);
       b.innerHTML = '<i>' + String(i + 1).padStart(2, '0') + '</i><span><b>' + escapeHtml(w.name) + '</b><small>' + info + '</small></span>';
       b.onclick = () => { Sfx.click(); this.selWorld = w.id; this.render_fly(); };
       pins.appendChild(b);
@@ -282,8 +271,11 @@ const UI = {
   renderMapPanel(intent, by) {
     const w = WORLD_BY_ID[this.selWorld], ok = worldUnlocked(w), panel = $('map-panel');
     const opt = (title, sub, label, fn, off) => { const el = document.createElement('div'); el.className = 'opt'; el.innerHTML = '<span><b>' + title + '</b><small>' + sub + '</small></span><button class="btn small' + (intent === 'courses' ? '' : ' sky') + '"' + (off ? ' disabled' : '') + '>' + label + '</button>'; el.querySelector('button').onclick = () => { Sfx.click(); fn(); }; return el; };
-    panel.innerHTML = '<span class="label">' + String(WORLDS.indexOf(w) + 1).padStart(2, '0') + ' · ' + (G.save.shards[w.id] || []).length + ' / 20 Sky Shards</span><h3>' + escapeHtml(w.name) + '</h3><p class="muted" style="margin:0">' + escapeHtml(w.blurb) + '</p>';
-    if (!ok) { panel.insertAdjacentHTML('beforeend', '<div class="panel">Locked. Earn ' + w.unlock + ' medals to open it. You have ' + medalCount() + '.</div>'); return; }
+    $('map-img').src = 'thumbs/world-' + w.id + '.jpg';
+    $('map-pic').classList.toggle('locked', !ok);
+    $('map-cap').innerHTML = '<span class="label">' + String(WORLDS.indexOf(w) + 1).padStart(2, '0') + ' · ' + (G.save.shards[w.id] || []).length + ' / 20 Sky Shards</span><h3>' + escapeHtml(w.name) + '</h3><p>' + escapeHtml(w.blurb) + '</p>';
+    panel.innerHTML = '';
+    if (!ok) { panel.innerHTML = '<div class="opt"><span><b>Locked</b><small>Earn ' + w.unlock + ' medals to open it. You have ' + medalCount() + '.</small></span></div>'; return; }
     if (intent === 'courses') {
       for (const k of ['line', 'gauntlet']) {
         const cdef = COURSE_BY_ID[w.id + '-' + k], got = G.save.medals[cdef.id];
@@ -620,12 +612,21 @@ const UI = {
     const btns = [['Resume', () => resumeGame()]];
     if (run.mode === 'course' || run.mode === 'attack') btns.push(['Restart', () => { $('ov-pause').hidden = true; startRun({ mode: run.mode, courseId: run.cdef && run.cdef.id, worldId: G.worldId, ghost: run.boardGhost }); }]);
     btns.push(['Change camera (' + CAM_NAMES[G.camMode].replace(' camera', '') + ')', () => { cycleCamera(); this.pause(); }]);
+    btns.push(['Settings', () => this.pauseSettings()]);
     btns.push(['Sound: ' + (G.settings.master > 0 ? 'On' : 'Off'), () => { G.settings.master = G.settings.master > 0 ? 0 : 0.8; saveSettings(); Sfx.setVolumes(G.settings.master, G.settings.music, G.settings.sfx); this.pause(); }]);
     if (run.mode === 'free' || run.mode === 'sky') btns.push(['End flight', () => { $('ov-pause').hidden = true; G.state = 'play'; endFreeFlight(); }]);
     btns.push([run.mode === 'race' || run.mode === 'sky' ? 'Leave' : 'Quit to menu', () => this.quitToMenu()]);
     $('pause-btns').innerHTML = btns.map((b, i) => '<button class="btn ' + (i ? 'ghost' : '') + '" data-i="' + i + '">' + escapeHtml(b[0]) + '</button>').join('');
     $('pause-btns').querySelectorAll('button').forEach(b => (b.onclick = () => { Sfx.click(); btns[+b.dataset.i][1](); }));
     if (Input.mode !== 'touch') $('pause-btns').querySelector('button').focus();
+  },
+  // settings over a paused flight: no open() here, because open() would end the run; Back returns to the pause menu
+  pauseSettings() {
+    $('ov-pause').hidden = true;
+    $('scr-settings').hidden = false;
+    this.screen = 'settings'; this.fromPause = true;
+    this.render_settings();
+    this.focusFirst();
   },
   quitToMenu() {
     Net.leaveAll();

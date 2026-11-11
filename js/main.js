@@ -47,10 +47,12 @@ function tick(dt) {
       syncPlayerMesh(dt, 0.4);
       UI.handleNav();
       break;
-    case 'pause':
+    case 'pause': {
+      const inSettings = UI.fromPause; // Esc there goes back to the pause menu, not straight into the flight
       UI.handleNav();
-      if (I.pause) resumeGame();
+      if (I.pause && !inSettings) resumeGame();
       break;
+    }
     case 'photo':
       if (I.photo || I.pause) exitPhoto();
       break;
